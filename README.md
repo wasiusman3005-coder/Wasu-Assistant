@@ -40,28 +40,36 @@ Agar aap GitHub ka direct URL ya raw file link kholte hain aur **Blank Page** na
 3. **Error Boundary Protection (Shamil Kar Di Gayi Hai ✅)**:
    Humne `src/components/ErrorBoundary.tsx` add kar diya hai taake kisi bhi browser mein agar koi WebGL ya runtime issue aye to app blank na ho, balkay recovery screen show ho.
 
-### 🌐 Live Chalane Ke 3 Asaan Tareeqay:
+### 🌐 Live Chalane Ke 4 Asaan Tareeqay (Zero Blank Screen Guaranteed):
 
-#### Tareeqa 1: GitHub Pages Par Live Chalana (Free & Automatic)
+#### Tareeqa 1: 1-Command Direct Deploy (`npm run deploy`) — Sab Se Asaan!
+Aap apne computer ya terminal par sirf yeh likhein:
+```bash
+npm run deploy
+```
+Yeh command automatically production build banayegi aur aapke GitHub repository ki **`gh-pages`** branch par live upload kar degi.
+Us ke baad:
+1. GitHub repository ke **Settings ➔ Pages** par jayein.
+2. **Branch**: select karein `gh-pages` aur folder `/ (root)`.
+3. **Save** dabayein. Aapka live URL `https://<username>.github.io/<repo-name>/` bina kisi error ya blank screen ke chalu ho jaega!
+
+#### Tareeqa 2: GitHub Actions Automated CI/CD
 1. Repository ko apne GitHub account par push karein.
 2. Repository ke **Settings** tab par jayein.
 3. Left menu se **Pages** par click karein.
-4. **Build and deployment** section mein:
-   - **Source**: Select karein **GitHub Actions**.
-5. Humne `.github/workflows/deploy.yml` pehle se bana kar repo mein daal di hai. GitHub automatically `npm run build` karega aur aapko live link mil jaega:
-   `https://<aapka-username>.github.io/<repo-name>/`
-   *(Yeh link 100% active chalega, blank screen bilkul nahi aegi!)*
+4. **Build and deployment** section mein **Source**: Select karein **GitHub Actions**.
+5. `.github/workflows/deploy.yml` automatically execute hoga aur production app ko deploy karega.
 
-#### Tareeqa 2: Vercel ya Netlify Par 1-Click Live Chalana (Free)
-1. [Vercel.com](https://vercel.com) ya [Netlify.com](https://netlify.com) par login karein.
+#### Tareeqa 3: Vercel ya Netlify Par 1-Click Live Chalana (Free)
+1. [Vercel.com](https://vercel.com) ya [Netlify.com](https://netlify.com) par free login karein.
 2. Apna GitHub repo select kar ke **Deploy** par click karein.
-3. 30 seconds mein aapko live fast link mil jaega.
+3. 30 seconds mein aapko live high-speed link mil jaega.
 
-#### Tareeqa 3: Apne PC ya Mobile Par Locally Chalana
+#### Tareeqa 4: Apne PC ya Mobile Par Locally Chalana
 ```bash
 git clone https://github.com/your-username/wasu-love-jarvis.git
 cd wasu-love-jarvis
-npm install
+npm install --legacy-peer-deps
 npm run dev
 ```
 Browser mein `http://localhost:3000` open karein!
