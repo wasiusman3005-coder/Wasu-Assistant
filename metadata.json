@@ -1,0 +1,6 @@
+{
+  "name": "WASU LOVE - AI Girlfriend & Jarvis Mobile Assistant",
+  "description": "Romantic AI female girlfriend and Jarvis assistant for your mobile phone with voice controls, call and message management, exam tracker, battery optimizer, and multilingual support in Urdu, English, and Punjabi.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

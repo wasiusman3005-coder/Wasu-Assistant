@@ -1,0 +1,13 @@
+services:
+  wasu-love:
+    build: .
+    container_name: wasu-love-jarvis
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    env_file:
+      - .env
