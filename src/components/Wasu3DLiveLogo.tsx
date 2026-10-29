@@ -234,11 +234,12 @@ export const Wasu3DLiveLogo: React.FC<Wasu3DLiveLogoProps> = ({
 
     // 8. Animation Loop
     let animationFrameId: number;
-    let clock = new THREE.Clock();
+    const timer = new THREE.Timer();
 
-    const animate = () => {
+    const animate = (timestamp: number = performance.now()) => {
       animationFrameId = requestAnimationFrame(animate);
-      const elapsedTime = clock.getElapsedTime();
+      timer.update(timestamp);
+      const elapsedTime = timer.getElapsed();
 
       // Continuous subtle idle rotation
       if (!isDraggingRef.current) {
