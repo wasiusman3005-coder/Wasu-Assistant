@@ -1,0 +1,17 @@
+node_modules/
+build/
+dist/
+dist_pc/
+build_pc/
+desktop/dist-electron/
+desktop/node_modules/
+coverage/
+.DS_Store
+*.log
+*.spec
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env*
+!.env.example

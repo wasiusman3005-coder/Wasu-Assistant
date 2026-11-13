@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-orbitron: 'Orbitron', sans-serif;
+    --font-rajdhani: 'Rajdhani', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    image-rendering: -webkit-optimize-contrast;
+  }
+
+  body {
+    font-family: var(--font-rajdhani);
+    letter-spacing: 0.025em;
+    background-color: #02050f;
+    color: #f1f5f9;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "kern" 1, "liga" 1;
+  }
+
+  img, canvas, svg {
+    image-rendering: high-quality;
+    shape-rendering: geometricPrecision;
+  }
+}
+
+.font-orbitron {
+  font-family: var(--font-orbitron);
+}
+
+.font-rajdhani {
+  font-family: var(--font-rajdhani);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Sci-Fi glowing effects */
+.glow-cyan {
+  box-shadow: 0 0 25px rgba(6, 182, 212, 0.45);
+}
+
+.glow-purple {
+  box-shadow: 0 0 25px rgba(168, 85, 247, 0.45);
+}
+
+.glow-emerald {
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.45);
+}
+
+.glow-text-cyan {
+  text-shadow: 0 0 12px rgba(6, 182, 212, 0.7);
+}
+
+.glow-text-purple {
+  text-shadow: 0 0 12px rgba(168, 85, 247, 0.7);
+}
+
+/* Quantum cybernetic grid background */
+.quantum-grid {
+  background-image: 
+    linear-gradient(to right, rgba(6, 182, 212, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(6, 182, 212, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Scanline visual overlay effect */
+.scanlines-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.2) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.015),
+    rgba(0, 255, 0, 0.01),
+    rgba(0, 0, 255, 0.015)
+  );
+  background-size: 100% 3px, 6px 100%;
+}
+
+/* Custom quantum scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(3, 7, 18, 0.8);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(6, 182, 212, 0.35);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(6, 182, 212, 0.65);
+}
+
+/* Perspective 3D desk & holographic card transformations */
+.perspective-800 {
+  perspective: 800px;
+}
+
+.perspective-1200 {
+  perspective: 1200px;
+}
+
+.desk-transform {
+  transform: rotateX(28deg) scale(0.98);
+  transform-style: preserve-3d;
+}
+
+@keyframes circuitPulse {
+  0% {
+    stroke-dashoffset: 200;
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0.3;
+  }
+}
+
+.circuit-animated {
+  stroke-dasharray: 12 8;
+  animation: circuitPulse 3s linear infinite;
+}
+
+@keyframes pedestalGlow {
+  0%, 100% {
+    box-shadow: 0 0 45px rgba(6, 182, 212, 0.6), inset 0 0 25px rgba(6, 182, 212, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 75px rgba(0, 240, 255, 0.9), inset 0 0 40px rgba(0, 240, 255, 0.7);
+  }
+}
+
+.pedestal-pulse {
+  animation: pedestalGlow 3.5s ease-in-out infinite;
+}
+
+@keyframes spinReverse {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-spin-reverse {
+  animation: spinReverse 12s linear infinite;
+}
+
+@keyframes overdriveCircuit {
+  0% {
+    stroke-dashoffset: 400;
+    opacity: 0.7;
+    filter: drop-shadow(0 0 8px #f43f5e);
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 16px #00f5ff);
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0.7;
+    filter: drop-shadow(0 0 8px #f59e0b);
+  }
+}
+
+.circuit-overdrive {
+  stroke-dasharray: 8 4;
+  animation: overdriveCircuit 0.8s linear infinite;
+}

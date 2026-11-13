@@ -1,0 +1,6 @@
+{
+  "name": "Q-NEXUS: Quantum Tachyon Jarvis OS",
+  "description": "Advanced Quantum Physics AI Desktop Operating Assistant with voice control, trilingual Urdu/English/Punjabi engine, PC automation, health monitor, and quantum core security.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
