@@ -96,12 +96,12 @@ export const VoiceJarvisModal: React.FC<VoiceJarvisModalProps> = ({
 
   // Suggested voice commands
   const suggestedCommands = [
-    "Haath hilao Zoya",
+    "Mjy humanoid model dikhao",
+    "Sirf face hologram dikhao",
+    "Hero pose dikhao Zoya",
     "Dance karo jaan",
-    "Flying kiss do",
-    "Open Humanoid",
-    "/image Neon Cyberpunk Jarvis",
-    "Analyze https://youtube.com/watch?v=dQw4w9WgXcQ",
+    "Kick karo Zoya",
+    "Kuch bhi perform karo",
   ];
 
   useEffect(() => {

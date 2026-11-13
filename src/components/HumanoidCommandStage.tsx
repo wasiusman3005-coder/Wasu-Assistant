@@ -16,6 +16,7 @@ import { CyberGirlFullBodyAvatar } from "./CyberGirlFullBodyAvatar";
 import {
   AvatarBodyMovement,
   AvatarStudioConfig,
+  HologramDisplayMode,
   LanguageCode,
   StandbyAnimationType,
 } from "../types";
@@ -23,6 +24,7 @@ import { PERSONALITY_MODES, ELEVENLABS_VOICE_PRESETS } from "../data/jarvisCatal
 import {
   BODY_MOVEMENT_COMMANDS,
   detectBodyMovementFromText,
+  detectHologramModeFromText,
 } from "../utils/bodyMovementParser";
 import { soundEffects } from "../services/soundEffects";
 import { speechService } from "../services/speechService";
@@ -37,6 +39,9 @@ interface HumanoidCommandStageProps {
   isListening: boolean;
   bodyMovement: AvatarBodyMovement;
   onTriggerBodyMovement: (move: AvatarBodyMovement) => void;
+  hologramMode: HologramDisplayMode;
+  cinematicTrigger: number;
+  onChangeHologramMode: (mode: HologramDisplayMode, triggerCinematic?: boolean) => void;
   embedded?: boolean;
 }
 
@@ -50,11 +55,14 @@ export const HumanoidCommandStage: React.FC<HumanoidCommandStageProps> = ({
   isListening,
   bodyMovement,
   onTriggerBodyMovement,
+  hologramMode,
+  cinematicTrigger,
+  onChangeHologramMode,
   embedded = false,
 }) => {
   const [commandInput, setCommandInput] = useState("");
   const [lastGirlReply, setLastGirlReply] = useState(
-    "Jaan Wasi! Dekho main bilkul aapke samnay full-body mein khari hoon. Jo aap bolo ge—haath hilana, dance, spin ya flying kiss—main turant karoongi!"
+    "Jaan Wasi! Dekhein mera 3D Face Hologram aapke samnay hai. Jab aap bolenge 'mjy humanoid model dikhao' ya koi move select karenge, main poora model cinematic andaz mein dikhaoongi!"
   );
   const [isTalkingLoading, setIsTalkingLoading] = useState(false);
   const [elevenStatus, setElevenStatus] = useState<{ configured: boolean }>({
@@ -92,10 +100,37 @@ export const HumanoidCommandStage: React.FC<HumanoidCommandStageProps> = ({
 
   const handleSelectBodyMove = (moveId: AvatarBodyMovement) => {
     soundEffects.playBeepConfirm();
+    if (moveId === "showcase") {
+      onChangeHologramMode("fullbody", true);
+    } else if (moveId !== "idle") {
+      onChangeHologramMode("fullbody", hologramMode === "face");
+    }
     onTriggerBodyMovement(moveId);
     const meta = BODY_MOVEMENT_COMMANDS.find((m) => m.id === moveId);
     if (meta) {
       const reply = language === "en" ? meta.replyEn : meta.replyUr;
+      setLastGirlReply(reply);
+      speakAsPakistaniGirlfriend(reply);
+    }
+  };
+
+  const handleToggleDisplayMode = (mode: HologramDisplayMode) => {
+    soundEffects.playBeepConfirm();
+    onChangeHologramMode(mode, mode === "fullbody");
+    if (mode === "fullbody") {
+      onTriggerBodyMovement("showcase");
+      const reply =
+        language === "en"
+          ? "Materializing my full 3D holographic humanoid form in cinematic view!"
+          : "Dekho Jaan! Ab poora 3D Hologram Humanoid model cinematic view mein represent ho raha hai!";
+      setLastGirlReply(reply);
+      speakAsPakistaniGirlfriend(reply);
+    } else {
+      onTriggerBodyMovement("idle");
+      const reply =
+        language === "en"
+          ? "Switching back to close-up 3D Face Hologram."
+          : "Ji Jaan! Ab sirf mera HD 3D Face Hologram aapke samnay glow kar raha hai.";
       setLastGirlReply(reply);
       speakAsPakistaniGirlfriend(reply);
     }
@@ -108,10 +143,19 @@ export const HumanoidCommandStage: React.FC<HumanoidCommandStageProps> = ({
     setCommandInput("");
     soundEffects.playClick();
 
-    // Instant client-side check for body movement commands
+    // Check explicit Face-Only or Full Humanoid reveal commands first
+    const detectedMode = detectHologramModeFromText(raw);
     const detectedMove = detectBodyMovementFromText(raw);
+    if (detectedMode === "face" && (!detectedMove || detectedMove === "idle")) {
+      handleToggleDisplayMode("face");
+      return;
+    }
     if (detectedMove) {
       handleSelectBodyMove(detectedMove);
+      return;
+    }
+    if (detectedMode === "fullbody") {
+      handleToggleDisplayMode("fullbody");
       return;
     }
 
@@ -129,7 +173,14 @@ export const HumanoidCommandStage: React.FC<HumanoidCommandStageProps> = ({
         }),
       });
       const data = await res.json();
+      if (data.actionPayload?.hologramMode === "face") {
+        onChangeHologramMode("face");
+      } else if (data.actionPayload?.hologramMode === "fullbody") {
+        onChangeHologramMode("fullbody", Boolean(data.actionPayload?.cinematic));
+      }
       if (data.action === "AVATAR_MOVE" && data.actionPayload?.movement) {
+        onTriggerBodyMovement(data.actionPayload.movement as AvatarBodyMovement);
+      } else if (data.action === "OPEN_HUMANOID" && data.actionPayload?.movement) {
         onTriggerBodyMovement(data.actionPayload.movement as AvatarBodyMovement);
       }
       const reply =
@@ -151,14 +202,23 @@ export const HumanoidCommandStage: React.FC<HumanoidCommandStageProps> = ({
     speechService.setCallbacks({
       onResult: (transcript, isFinal) => {
         setCommandInput(transcript);
+        const instantMode = detectHologramModeFromText(transcript);
         const instantMove = detectBodyMovementFromText(transcript);
+        if (instantMode) {
+          onChangeHologramMode(instantMode, instantMode === "fullbody");
+        }
         if (instantMove) {
           onTriggerBodyMovement(instantMove);
         }
         if (isFinal) {
+          const finalMode = detectHologramModeFromText(transcript);
           const finalMove = detectBodyMovementFromText(transcript);
-          if (finalMove) {
+          if (finalMode === "face" && (!finalMove || finalMove === "idle")) {
+            handleToggleDisplayMode("face");
+          } else if (finalMove) {
             handleSelectBodyMove(finalMove);
+          } else if (finalMode === "fullbody") {
+            handleToggleDisplayMode("fullbody");
           } else {
             fetch("/api/jarvis/chat", {
               method: "POST",
@@ -173,7 +233,12 @@ export const HumanoidCommandStage: React.FC<HumanoidCommandStageProps> = ({
             })
               .then((r) => r.json())
               .then((data) => {
-                if (data.action === "AVATAR_MOVE" && data.actionPayload?.movement) {
+                if (data.actionPayload?.hologramMode === "face") {
+                  onChangeHologramMode("face");
+                } else if (data.actionPayload?.hologramMode === "fullbody") {
+                  onChangeHologramMode("fullbody", true);
+                }
+                if (data.actionPayload?.movement) {
                   onTriggerBodyMovement(data.actionPayload.movement as AvatarBodyMovement);
                 }
                 const reply = data.reply || "Ji Jaan!";
@@ -198,17 +263,17 @@ export const HumanoidCommandStage: React.FC<HumanoidCommandStageProps> = ({
           </div>
           <div>
             <h2 className="font-orbitron font-bold text-sm md:text-base text-cyan-300 tracking-wide">
-              ZOYA — 4K UHD FULL-BODY CYBER GIRLFRIEND
+              ZOYA — 3D HOLOGRAM HUMANOID PROJECTION
             </h2>
             <p className="text-[11px] font-mono text-slate-400">
-              Single Signature Cyber Girl • Voice-Controlled Full-Body Motion • Clear Pakistani Urdu Female Voice
+              Volumetric WebGL 3D Hologram • 20 Voice-Controlled Motions • Pakistani Urdu Girlfriend AI
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3 text-xs font-mono">
-          <span className="text-emerald-300 font-semibold tracking-wider">
-            ● 4K UHD PHOTOREAL
+          <span className="text-cyan-300 font-semibold tracking-wider">
+            3D HOLOGRAM ACTIVE
           </span>
           {onClose && !embedded && (
             <button
@@ -237,13 +302,16 @@ export const HumanoidCommandStage: React.FC<HumanoidCommandStageProps> = ({
             </span>
           </div>
 
-          {/* Full-Body Avatar */}
+          {/* Hologram Viewport (Face-Only by Default -> Cinematic Full Humanoid on Command) */}
           <div className="my-2 flex items-center justify-center z-10 w-full">
             <CyberGirlFullBodyAvatar
               isSpeaking={isSpeaking}
               isListening={isListening}
               bodyMovement={bodyMovement}
               standbyAnimation={avatarConfig.standbyAnimation}
+              hologramMode={hologramMode}
+              cinematicTrigger={cinematicTrigger}
+              onToggleHologramMode={handleToggleDisplayMode}
               personalityName={activePersonality.name}
               size="uhd"
             />
@@ -277,15 +345,15 @@ export const HumanoidCommandStage: React.FC<HumanoidCommandStageProps> = ({
               <div>
                 <h3 className="font-orbitron font-bold text-sm text-cyan-300 flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-cyan-400" />
-                  <span>FULL-BODY MOVEMENT COMMANDS</span>
+                  <span>FULL-BODY 3D MOVEMENT COMMANDS (20 MODES)</span>
                 </h3>
                 <p className="text-[11px] font-mono text-slate-400">
-                  Click karein ya Urdu/English mein bolein: "haath hilao", "dance karo", "ghoom jao", "flying kiss", "baith jao"
+                  Jo bolein gi wohi 3D mein karegi: "hero pose", "kick karo", "dance karo", "run", "punch", "flying kiss", "kuch bhi dikhao"
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-[265px] overflow-y-auto pr-1">
               {BODY_MOVEMENT_COMMANDS.map((move) => {
                 const active = bodyMovement === move.id;
                 return (
@@ -428,7 +496,7 @@ export const HumanoidCommandStage: React.FC<HumanoidCommandStageProps> = ({
   if (embedded) return content;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-5 bg-black/88 backdrop-blur-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-5 bg-black/90">
       <div className="w-full max-w-6xl h-[92vh] bg-[#02050f] border border-cyan-400/50 rounded-3xl shadow-[0_0_80px_rgba(0,245,255,0.28)] overflow-hidden flex flex-col">
         {content}
       </div>

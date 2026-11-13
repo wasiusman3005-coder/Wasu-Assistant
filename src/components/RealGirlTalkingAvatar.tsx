@@ -1,6 +1,6 @@
 import React from "react";
 import { CyberGirlFullBodyAvatar } from "./CyberGirlFullBodyAvatar";
-import { AvatarBodyMovement, StandbyAnimationType } from "../types";
+import { AvatarBodyMovement, HologramDisplayMode, StandbyAnimationType } from "../types";
 
 interface RealGirlTalkingAvatarProps {
   isSpeaking: boolean;
@@ -9,6 +9,8 @@ interface RealGirlTalkingAvatarProps {
   outfitName?: string;
   bodyMovement?: AvatarBodyMovement;
   standbyAnimation?: StandbyAnimationType;
+  hologramMode?: HologramDisplayMode;
+  cinematicTrigger?: number;
   outfitChangingBurst?: boolean;
   size?: "sm" | "md" | "lg" | "uhd";
 }
@@ -19,6 +21,8 @@ export const RealGirlTalkingAvatar: React.FC<RealGirlTalkingAvatarProps> = ({
   personalityName = "Zoya (Your Cyber Girlfriend)",
   bodyMovement = "idle",
   standbyAnimation = "breathe",
+  hologramMode = "face",
+  cinematicTrigger = 0,
   size = "lg",
 }) => {
   return (
@@ -27,6 +31,8 @@ export const RealGirlTalkingAvatar: React.FC<RealGirlTalkingAvatarProps> = ({
       isListening={isListening}
       bodyMovement={bodyMovement}
       standbyAnimation={standbyAnimation}
+      hologramMode={hologramMode}
+      cinematicTrigger={cinematicTrigger}
       personalityName={personalityName}
       size={size}
     />

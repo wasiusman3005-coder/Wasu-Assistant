@@ -1,63 +1,99 @@
-import React, { useEffect, useState, useRef } from "react";
-import { Heart, Volume2, Radio } from "lucide-react";
-import { AvatarBodyMovement, StandbyAnimationType } from "../types";
-import zoyaFullBodyPhotoreal from "../assets/images/zoya_fullbody_action_1794547190192.jpg";
+import React, { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { Volume2, Radio, RotateCcw, User, Sparkles } from "lucide-react";
+import { AvatarBodyMovement, HologramDisplayMode, StandbyAnimationType } from "../types";
+import { createCyberGirl3DRig } from "../utils/cyberGirl3DRig";
 
 export const CYBER_GIRL_PORTRAIT_URL = "/assets/aistudio/images__5__ddc17e2d.jpg";
-export const ZOYA_TACTICAL_REF_URL = "/assets/aistudio/images_79a73411.jpg";
+
+// Pre-allocated vectors for zero-GC cinematic camera damping
+const _camGoal = new THREE.Vector3();
+const _targetGoal = new THREE.Vector3();
 
 interface CyberGirlFullBodyAvatarProps {
   isSpeaking: boolean;
   isListening?: boolean;
   bodyMovement?: AvatarBodyMovement;
   standbyAnimation?: StandbyAnimationType;
+  hologramMode?: HologramDisplayMode;
+  cinematicTrigger?: number;
+  onToggleHologramMode?: (mode: HologramDisplayMode) => void;
   personalityName?: string;
   size?: "sm" | "md" | "lg" | "uhd";
   onClickAvatar?: () => void;
 }
-
-interface BodyMotionFrame {
-  translateX: number;
-  translateY: number;
-  rotateX: number;
-  rotateY: number;
-  rotateZ: number;
-  scale: number;
-  scaleY: number;
-}
-
-const DEFAULT_MOTION: BodyMotionFrame = {
-  translateX: 0,
-  translateY: 0,
-  rotateX: 0,
-  rotateY: 0,
-  rotateZ: 0,
-  scale: 1,
-  scaleY: 1,
-};
 
 export const CyberGirlFullBodyAvatar: React.FC<CyberGirlFullBodyAvatarProps> = ({
   isSpeaking,
   isListening = false,
   bodyMovement = "idle",
   standbyAnimation = "breathe",
+  hologramMode = "face",
+  cinematicTrigger = 0,
+  onToggleHologramMode,
   personalityName = "Zoya (Your Cyber Girlfriend)",
   size = "uhd",
   onClickAvatar,
 }) => {
-  const [motion, setMotion] = useState<BodyMotionFrame>(DEFAULT_MOTION);
+  const mountRef = useRef<HTMLDivElement>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const [mouthPulse, setMouthPulse] = useState(0);
-  const [activeImgSrc, setActiveImgSrc] = useState<string>(zoyaFullBodyPhotoreal);
-  const [imgFailed, setImgFailed] = useState(false);
+  const [webglFailed, setWebglFailed] = useState(false);
 
-  const rafRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number>(performance.now());
+  // Scripted cinematic camera transition state kept in ref so WebGL canvas never remounts
+  const camScriptRef = useRef<{
+    active: boolean;
+    phaseElapsed: number;
+    phaseDuration: number;
+    mode: HologramDisplayMode;
+  }>({
+    active: true,
+    phaseElapsed: 0,
+    phaseDuration: 1.8,
+    mode: hologramMode,
+  });
 
+  const stateRef = useRef({
+    isSpeaking,
+    isListening,
+    bodyMovement,
+    standbyAnimation,
+    hologramMode,
+  });
+
+  // Trigger cinematic camera glide whenever hologramMode or cinematicTrigger changes
   useEffect(() => {
-    startTimeRef.current = performance.now();
-  }, [bodyMovement]);
+    const prevMode = stateRef.current.hologramMode;
+    stateRef.current = {
+      isSpeaking,
+      isListening,
+      bodyMovement,
+      standbyAnimation,
+      hologramMode,
+    };
 
-  // Real-time speech cadence pulse
+    if (prevMode !== hologramMode || cinematicTrigger > 0) {
+      camScriptRef.current = {
+        active: true,
+        phaseElapsed: 0,
+        phaseDuration: hologramMode === "fullbody" ? 2.4 : 1.2,
+        mode: hologramMode,
+      };
+      if (cameraRef.current && controlsRef.current) {
+        if (hologramMode === "fullbody" && prevMode === "face") {
+          // Sweep smoothly outward from heroic low-left angle
+          cameraRef.current.position.set(-0.85, 0.72, 1.9);
+        }
+        controlsRef.current.minDistance = hologramMode === "face" ? 0.45 : 1.35;
+        controlsRef.current.maxDistance = hologramMode === "face" ? 1.8 : 4.6;
+      }
+    }
+  }, [isSpeaking, isListening, bodyMovement, standbyAnimation, hologramMode, cinematicTrigger]);
+
+  // Voice waveform pulse for footer indicator
   useEffect(() => {
     if (!isSpeaking) {
       setMouthPulse(0);
@@ -65,265 +101,385 @@ export const CyberGirlFullBodyAvatar: React.FC<CyberGirlFullBodyAvatarProps> = (
     }
     const timer = setInterval(() => {
       setMouthPulse(Math.random() * 0.85 + 0.15);
-    }, 80);
+    }, 85);
     return () => clearInterval(timer);
   }, [isSpeaking]);
 
-  // 60FPS 3D Perspective Full-Body Choreography Engine (Zero-Cartoon Live Photorealistic Motion)
+  // Real-Time 3D Hologram WebGL Scene Lifecycle
   useEffect(() => {
-    const prefersReducedMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const container = mountRef.current;
+    if (!container) return;
 
-    if (prefersReducedMotion) {
-      setMotion(DEFAULT_MOTION);
+    const initialW = Math.max(container.clientWidth || 320, 140);
+    const initialH = Math.max(container.clientHeight || 440, 180);
+
+    const isSoftwareGl = (() => {
+      try {
+        const probe = document.createElement("canvas").getContext("webgl2");
+        if (!probe) return true;
+        const ext = probe.getExtension("WEBGL_debug_renderer_info");
+        const param = ext ? ext.UNMASKED_RENDERER_WEBGL : probe.RENDERER;
+        const gpu = String(probe.getParameter(param));
+        probe.getExtension("WEBGL_lose_context")?.loseContext();
+        return /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(gpu);
+      } catch {
+        return true;
+      }
+    })();
+
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        alpha: true,
+        antialias: !isSoftwareGl,
+        powerPreference: "high-performance",
+      });
+    } catch {
+      setWebglFailed(true);
       return;
     }
 
-    const tick = (now: number) => {
-      const t = (now - startTimeRef.current) / 1000;
-      const breath = Math.sin(t * 2.1);
-      const speakEnergy = isSpeaking ? Math.sin(t * 8.5) : 0;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.setPixelRatio(
+      isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, size === "sm" ? 1.5 : 2.5)
+    );
+    renderer.setSize(initialW, initialH);
+    renderer.shadowMap.enabled = false;
 
-      const next: BodyMotionFrame = { ...DEFAULT_MOTION };
-      next.translateY = standbyAnimation === "float" ? Math.sin(t * 2.5) * 6 : breath * 2.2;
-      next.scaleY = 1 + breath * 0.008;
-      next.rotateY = Math.sin(t * 0.85) * 3.5;
-      next.rotateZ = speakEnergy * 1.1;
+    container.innerHTML = "";
+    renderer.domElement.style.display = "block";
+    renderer.domElement.style.width = "100%";
+    renderer.domElement.style.height = "100%";
+    container.appendChild(renderer.domElement);
 
-      switch (bodyMovement) {
-        case "wave": {
-          next.rotateZ = -3.5 + Math.sin(t * 6.5) * 4.2;
-          next.rotateY = 8 + Math.sin(t * 3.2) * 5;
-          next.translateY = -4 + Math.sin(t * 6.5) * 3;
-          next.scale = 1.02;
-          break;
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x030816, 0.08);
+
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const roomEnv = new RoomEnvironment();
+    const envTarget = pmremGenerator.fromScene(roomEnv, 0.04);
+    scene.environment = envTarget.texture;
+    roomEnv.dispose();
+    pmremGenerator.dispose();
+
+    const startFace = stateRef.current.hologramMode === "face";
+    const camera = new THREE.PerspectiveCamera(35, initialW / initialH, 0.08, 40);
+    if (startFace) {
+      camera.position.set(0, 1.57, 0.74);
+    } else {
+      camera.position.set(0.32, 1.05, 2.65);
+    }
+    cameraRef.current = camera;
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, startFace ? 1.57 : 0.88, startFace ? 0.04 : 0.02);
+    controls.enablePan = false;
+    controls.enableZoom = size !== "sm";
+    controls.enableRotate = size !== "sm";
+    controls.enableDamping = !isSoftwareGl;
+    controls.dampingFactor = 0.07;
+    controls.minDistance = startFace ? 0.45 : 1.35;
+    controls.maxDistance = startFace ? 1.8 : 4.6;
+    controls.maxPolarAngle = Math.PI * 0.56;
+    controls.minPolarAngle = Math.PI * 0.16;
+    controls.update();
+    controlsRef.current = controls;
+
+    // Yield scripted cinematic camera motion immediately if user drags manually
+    const onUserControlStart = () => {
+      camScriptRef.current.active = false;
+    };
+    controls.addEventListener("start", onUserControlStart);
+
+    // Balanced Studio Lighting Rig for Projector Base
+    const hemiLight = new THREE.HemisphereLight(0xcbe8ff, 0x0f172a, 0.9);
+    scene.add(hemiLight);
+
+    const keyLight = new THREE.DirectionalLight(0xe0f2fe, 1.6);
+    keyLight.position.set(1.8, 3.2, 2.6);
+    scene.add(keyLight);
+
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.25);
+    rimLight.position.set(-2.0, 2.1, -2.2);
+    scene.add(rimLight);
+
+    // Deep Obsidian Projector Deck under Pedestal
+    const floorGeo = new THREE.CircleGeometry(1.9, 48);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x020612,
+      roughness: 0.45,
+      metalness: 0.55,
+    });
+    const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.position.y = -0.048;
+    scene.add(floorMesh);
+
+    const maxAniso = renderer.capabilities.getMaxAnisotropy();
+    const rig = createCyberGirl3DRig(maxAniso);
+    scene.add(rig.root);
+
+    if (!isSoftwareGl) {
+      renderer.compile(scene, camera);
+    }
+
+    const clock = new THREE.Clock();
+    let frameId = 0;
+    let disposed = false;
+
+    const afterDraw = (cb: () => void) => {
+      const gl = renderer.getContext() as WebGL2RenderingContext;
+      const sync = gl.fenceSync ? gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0) : null;
+      if (!sync) {
+        frameId = window.setTimeout(cb, 80);
+        return;
+      }
+      gl.flush();
+      const poll = () => {
+        if (disposed) {
+          gl.deleteSync(sync);
+          return;
         }
-        case "dance": {
-          next.translateX = Math.sin(t * 3.2) * 14;
-          next.translateY = -Math.abs(Math.sin(t * 6.4)) * 12;
-          next.rotateZ = Math.sin(t * 3.2) * 5.5;
-          next.rotateY = Math.cos(t * 3.2) * 14;
-          next.scale = 1.02 + Math.sin(t * 6.4) * 0.025;
-          break;
+        const status = gl.getSyncParameter(sync, gl.SYNC_STATUS);
+        if (status === gl.UNSIGNALED) {
+          frameId = window.setTimeout(poll, 6);
+        } else {
+          gl.deleteSync(sync);
+          frameId = window.setTimeout(cb, 80);
         }
-        case "walk": {
-          const stride = Math.sin(t * 4.8);
-          next.translateY = -Math.abs(stride) * 7;
-          next.translateX = Math.sin(t * 2.4) * 6;
-          next.rotateY = stride * 10;
-          next.rotateZ = stride * 2.8;
-          next.scale = 1.01 + Math.abs(stride) * 0.02;
-          break;
+      };
+      frameId = window.setTimeout(poll, 6);
+    };
+
+    const tick = () => {
+      if (disposed) return;
+      const dt = Math.max(clock.getDelta(), 0.001);
+      const elapsed = clock.getElapsedTime();
+      const {
+        bodyMovement: mv,
+        standbyAnimation: sb,
+        hologramMode: hm,
+        isSpeaking: spk,
+        isListening: lst,
+      } = stateRef.current;
+
+      rig.update({
+        dt,
+        elapsed,
+        movement: mv,
+        standby: sb,
+        hologramMode: hm,
+        isSpeaking: spk,
+        isListening: lst,
+      });
+
+      // Smooth damped cinematic camera glides (auto-stops when arrived or on user drag)
+      const script = camScriptRef.current;
+      if (script.active) {
+        script.phaseElapsed += dt;
+        const safeDt = Math.min(dt, 0.05);
+        if (script.mode === "face") {
+          _camGoal.set(0, 1.57, 0.74);
+          _targetGoal.set(0, 1.57, 0.04);
+        } else {
+          // Two-beat cinematic sweep: low heroic pan -> full-body showcase hero angle
+          const t = Math.min(1, script.phaseElapsed / script.phaseDuration);
+          if (t < 0.42) {
+            _camGoal.set(-0.55, 0.85, 2.25);
+            _targetGoal.set(0, 1.05, 0);
+          } else {
+            _camGoal.set(0.32, 1.04, 2.68);
+            _targetGoal.set(0, 0.88, 0);
+          }
         }
-        case "spin": {
-          next.rotateY = (t * 165) % 360;
-          next.translateY = -4 + Math.sin(t * 3.5) * 3;
-          next.scale = 1.02;
-          break;
-        }
-        case "heart": {
-          next.scale = 1.045 + Math.sin(t * 3.4) * 0.015;
-          next.rotateX = 4;
-          next.rotateZ = Math.sin(t * 2.5) * 2.5;
-          next.translateY = -3 + breath * 2;
-          break;
-        }
-        case "hug": {
-          next.scale = 1.075 + Math.sin(t * 3.2) * 0.02;
-          next.translateY = -6 + breath * 2.5;
-          next.rotateX = 5;
-          break;
-        }
-        case "salute": {
-          next.translateY = -8;
-          next.rotateZ = 0;
-          next.rotateY = -3;
-          next.scale = 1.03;
-          break;
-        }
-        case "sit": {
-          next.translateY = 14 + breath * 1.6;
-          next.scaleY = 0.94;
-          next.rotateX = 7;
-          break;
-        }
-        case "jump": {
-          const hop = Math.abs(Math.sin(t * 5.2));
-          next.translateY = -hop * 28;
-          next.scale = 1 + hop * 0.04;
-          next.rotateZ = Math.sin(t * 5.2) * 2.5;
-          break;
-        }
-        case "nod": {
-          next.rotateX = Math.sin(t * 9.5) * 6;
-          next.translateY = Math.sin(t * 9.5) * 3.5;
-          break;
-        }
-        default: {
-          next.translateY += speakEnergy * 1.4;
-          break;
+        camera.position.x = THREE.MathUtils.damp(camera.position.x, _camGoal.x, 3.8, safeDt);
+        camera.position.y = THREE.MathUtils.damp(camera.position.y, _camGoal.y, 3.8, safeDt);
+        camera.position.z = THREE.MathUtils.damp(camera.position.z, _camGoal.z, 3.8, safeDt);
+        controls.target.x = THREE.MathUtils.damp(controls.target.x, _targetGoal.x, 4.5, safeDt);
+        controls.target.y = THREE.MathUtils.damp(controls.target.y, _targetGoal.y, 4.5, safeDt);
+        controls.target.z = THREE.MathUtils.damp(controls.target.z, _targetGoal.z, 4.5, safeDt);
+
+        if (
+          script.phaseElapsed >= script.phaseDuration &&
+          camera.position.distanceTo(_camGoal) < 0.025
+        ) {
+          script.active = false;
         }
       }
 
-      setMotion(next);
-      rafRef.current = requestAnimationFrame(tick);
+      controls.update();
+      renderer.render(scene, camera);
+
+      if (isSoftwareGl) {
+        afterDraw(tick);
+      } else {
+        frameId = requestAnimationFrame(tick);
+      }
     };
 
-    rafRef.current = requestAnimationFrame(tick);
+    frameId = requestAnimationFrame(tick);
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = Math.max(entry.contentRect.width, 100);
+        const h = Math.max(entry.contentRect.height, 120);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      }
+    });
+    resizeObserver.observe(container);
+
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      disposed = true;
+      cancelAnimationFrame(frameId);
+      clearTimeout(frameId);
+      controls.removeEventListener("start", onUserControlStart);
+      resizeObserver.disconnect();
+      controls.dispose();
+      rig.dispose();
+      floorGeo.dispose();
+      floorMat.dispose();
+      envTarget.dispose();
+      renderer.dispose();
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
     };
-  }, [bodyMovement, standbyAnimation, isSpeaking]);
+  }, [size]);
+
+  const handleResetCamera = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    camScriptRef.current = {
+      active: true,
+      phaseElapsed: 0,
+      phaseDuration: hologramMode === "fullbody" ? 1.8 : 1.0,
+      mode: hologramMode,
+    };
+  };
 
   const frameDimensions =
     size === "sm"
-      ? "w-36 h-48"
+      ? "w-40 h-52"
       : size === "md"
-      ? "w-56 h-72"
+      ? "w-60 h-80"
       : size === "lg"
-      ? "w-72 h-[380px]"
-      : "w-80 sm:w-[370px] h-[420px] sm:h-[490px]";
+      ? "w-72 h-[410px]"
+      : "w-full h-[430px] sm:h-[490px]";
 
   const moveLabelMap: Record<AvatarBodyMovement, string> = {
-    idle: "TACTICAL STANDBY",
-    wave: "WAVING AT WASI",
-    dance: "DANCING GROOVE",
-    walk: "TACTICAL STRIDE",
-    spin: "360° TURNAROUND",
-    heart: "FLYING KISS & LOVE",
-    hug: "WARM EMBRACE",
+    idle: hologramMode === "face" ? "3D FACE HOLOGRAM" : "3D HOLOGRAM STANDBY",
+    showcase: "CINEMATIC HUMANOID REVEAL",
+    crouch_hero: "HOLOGRAM HERO CROUCH",
+    wave: "HOLOGRAM WAVING",
+    dance: "HOLOGRAM 3D DANCE",
+    walk: "HOLOGRAM CATWALK",
+    run: "HOLOGRAM SPRINT",
+    spin: "360° HOLOGRAM TURN",
+    heart: "HOLOGRAM FLYING KISS",
+    hug: "HOLOGRAM HUG",
     salute: "COMMANDER SALUTE",
-    sit: "TACTICAL CROUCH",
-    jump: "THRUSTER LEAP",
-    nod: "ATTENTIVE NOD",
-  };
-
-  const handleImageError = () => {
-    if (activeImgSrc === zoyaFullBodyPhotoreal) {
-      setActiveImgSrc(ZOYA_TACTICAL_REF_URL);
-    } else if (activeImgSrc === ZOYA_TACTICAL_REF_URL) {
-      setActiveImgSrc(CYBER_GIRL_PORTRAIT_URL);
-    } else {
-      setImgFailed(true);
-    }
+    kick: "HOLOGRAM KARATE KICK",
+    punch: "HOLOGRAM COMBAT",
+    squat: "HOLOGRAM SQUATS",
+    sit: "HOLOGRAM SEATED",
+    jump: "HOLOGRAM THRUSTER JUMP",
+    bow: "HOLOGRAM BOW",
+    stretch: "HOLOGRAM STRETCH",
+    nod: "HOLOGRAM NOD",
+    shake_no: "HOLOGRAM NO",
+    freestyle: "FREESTYLE 3D HOLOGRAM",
   };
 
   return (
     <div
       onClick={onClickAvatar}
-      className={`relative flex flex-col items-center justify-end select-none ${frameDimensions} ${
+      className={`relative flex flex-col items-center justify-between select-none ${frameDimensions} ${
         onClickAvatar ? "cursor-pointer" : ""
       }`}
     >
-      {/* Subtle Holographic Studio Rim Light Backdrop */}
-      <div
-        className={`pointer-events-none absolute inset-x-8 top-6 bottom-12 rounded-full blur-3xl transition-opacity duration-300 ${
-          isSpeaking
-            ? "bg-cyan-400/25 opacity-100"
-            : isListening
-            ? "bg-amber-400/20 opacity-90"
-            : bodyMovement === "heart" || bodyMovement === "hug"
-            ? "bg-rose-400/20 opacity-95"
-            : "bg-sky-500/15 opacity-75"
-        }`}
-      />
+      {/* Top Mode Toggle, Camera Hint & Reset Button (No backdrop-blur over WebGL!) */}
+      {size !== "sm" && (
+        <div className="absolute top-2 inset-x-2 z-20 flex items-center justify-between pointer-events-none gap-2">
+          <div className="flex items-center gap-1 pointer-events-auto">
+            {onToggleHologramMode ? (
+              <div className="flex items-center rounded bg-[#030916]/95 border border-cyan-500/40 p-0.5">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleHologramMode("face");
+                  }}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer transition-colors ${
+                    hologramMode === "face"
+                      ? "bg-cyan-500 text-slate-950 font-bold"
+                      : "text-cyan-200 hover:text-white"
+                  }`}
+                >
+                  <User className="w-3 h-3" />
+                  <span>Face Holo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleHologramMode("fullbody");
+                  }}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer transition-colors ${
+                    hologramMode === "fullbody"
+                      ? "bg-cyan-500 text-slate-950 font-bold"
+                      : "text-cyan-200 hover:text-white"
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Full Model</span>
+                </button>
+              </div>
+            ) : (
+              <span className="text-[10px] font-mono tracking-wider uppercase text-cyan-300 bg-[#030916]/90 px-2 py-0.5 rounded border border-cyan-400/40">
+                {hologramMode === "face" ? "Face Hologram" : "Full 3D Model"}
+              </span>
+            )}
+          </div>
 
-      {/* Affectionate Floating Hearts for Girlfriend Heart / Hug Gestures */}
-      {(bodyMovement === "heart" || bodyMovement === "hug") && (
-        <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
-          {[0, 1, 2, 3].map((i) => (
-            <Heart
-              key={i}
-              className="absolute w-5 h-5 text-rose-400 fill-rose-500/80 animate-bounce"
-              style={{
-                left: `${22 + i * 18}%`,
-                top: `${14 + (i % 2) * 14}%`,
-                animationDelay: `${i * 160}ms`,
-              }}
-            />
-          ))}
+          <div className="flex items-center gap-1.5 pointer-events-auto">
+            <span className="hidden sm:inline text-[10px] font-mono text-cyan-200/80 bg-[#040918]/90 px-2 py-0.5 rounded border border-cyan-500/30">
+              Drag 360°
+            </span>
+            <button
+              type="button"
+              onClick={handleResetCamera}
+              title="Reset / Replay Cinematic View"
+              className="p-1 rounded bg-[#040918]/90 hover:bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Photorealistic Full-Body Female Humanoid Stage */}
-      <div
-        className="relative z-10 w-full h-full flex items-end justify-center overflow-visible"
-        style={{ perspective: "1200px" }}
-      >
-        {/* Floor Holographic Pedestal Rings */}
-        <div className="pointer-events-none absolute bottom-5 inset-x-6 flex items-center justify-center">
-          <div
-            className={`w-full h-9 rounded-[100%] border transition-colors duration-300 ${
-              isSpeaking
-                ? "border-cyan-400/80 bg-cyan-500/15 shadow-[0_0_28px_rgba(34,211,238,0.45)]"
-                : bodyMovement === "jump"
-                ? "border-cyan-300 bg-cyan-400/25 shadow-[0_0_36px_rgba(34,211,238,0.65)]"
-                : "border-cyan-500/45 bg-cyan-950/20 shadow-[0_0_18px_rgba(6,182,212,0.25)]"
-            }`}
-          />
-          <div className="absolute w-3/4 h-5 rounded-[100%] border border-sky-200/35" />
-        </div>
-
-        {/* Dynamic Articulated Photorealistic Humanoid Figure */}
+      {/* Isolated 3D Hologram WebGL Viewport Container */}
+      {!webglFailed ? (
         <div
-          className="relative w-full h-full flex items-end justify-center will-change-transform"
-          style={{
-            transformStyle: "preserve-3d",
-            transform: `translate3d(${motion.translateX.toFixed(2)}px, ${motion.translateY.toFixed(
-              2
-            )}px, 0) rotateX(${motion.rotateX.toFixed(2)}deg) rotateY(${motion.rotateY.toFixed(
-              2
-            )}deg) rotateZ(${motion.rotateZ.toFixed(2)}deg) scale(${motion.scale.toFixed(
-              3
-            )}, ${(motion.scale * motion.scaleY).toFixed(3)})`,
-          }}
-        >
-          {!imgFailed ? (
-            <div className="relative w-full h-full flex items-end justify-center">
-              <img
-                src={activeImgSrc}
-                alt={`${personalityName} — Full-Body Photorealistic Tactical Humanoid`}
-                referrerPolicy="no-referrer"
-                onError={handleImageError}
-                className="w-full h-full object-contain object-bottom rounded-xl mix-blend-lighten select-none"
-                style={{
-                  imageRendering: "high-quality" as React.CSSProperties["imageRendering"],
-                  filter: isSpeaking
-                    ? "contrast(1.06) brightness(1.04) drop-shadow(0 0 22px rgba(34,211,238,0.38))"
-                    : "contrast(1.04) brightness(1.02) drop-shadow(0 0 14px rgba(56,189,248,0.22))",
-                  maskImage:
-                    "radial-gradient(ellipse 88% 92% at 50% 48%, black 72%, transparent 100%)",
-                  WebkitMaskImage:
-                    "radial-gradient(ellipse 88% 92% at 50% 48%, black 72%, transparent 100%)",
-                }}
-              />
-
-              {/* Subtle Voice Lip Resonance Shimmer Positioned on Face When Speaking */}
-              {isSpeaking && activeImgSrc === zoyaFullBodyPhotoreal && (
-                <div
-                  className="pointer-events-none absolute rounded-full bg-cyan-300/35 blur-[4px]"
-                  style={{
-                    left: "56%",
-                    top: "25.5%",
-                    width: `${10 + mouthPulse * 8}px`,
-                    height: `${4 + mouthPulse * 4}px`,
-                    opacity: 0.25 + mouthPulse * 0.45,
-                  }}
-                />
-              )}
-            </div>
-          ) : (
-            <div className="w-full h-full rounded-xl border border-cyan-500/30 bg-slate-950/80 flex flex-col items-center justify-center p-4 text-center">
-              <Radio className="w-8 h-8 text-cyan-400 mb-2" />
-              <span className="text-xs font-mono text-cyan-200">{personalityName}</span>
-            </div>
-          )}
+          ref={mountRef}
+          className="w-full flex-1 min-h-0 rounded-xl overflow-hidden cursor-grab active:cursor-grabbing border border-cyan-500/25 bg-[radial-gradient(ellipse_at_center,rgba(6,182,212,0.18)_0%,rgba(4,10,24,0.92)_68%,rgba(2,5,14,0.98)_100%)]"
+          aria-label={`${personalityName} 3D Hologram Projection`}
+        />
+      ) : (
+        <div className="w-full flex-1 flex items-center justify-center rounded-xl border border-cyan-500/30 bg-[#030714]">
+          <img
+            src={CYBER_GIRL_PORTRAIT_URL}
+            alt={personalityName}
+            referrerPolicy="no-referrer"
+            className="h-full object-contain rounded-xl opacity-85"
+          />
         </div>
-      </div>
+      )}
 
-      {/* Bottom Clean Telemetry Status Strip */}
-      <div className="relative z-20 -mt-3 flex items-center gap-2 px-3 py-1 rounded-md bg-slate-950/90 border border-cyan-500/40 shadow-lg pointer-events-none">
+      {/* Bottom Compact Telemetry Bar (No backdrop-filter over WebGL!) */}
+      <div className="relative z-20 mt-1 flex items-center gap-2 px-3 py-1 rounded-md bg-[#030712] border border-cyan-500/45 pointer-events-none">
         {isSpeaking ? (
           <>
             <div className="flex items-end gap-0.5 h-3.5">
@@ -337,12 +493,12 @@ export const CyberGirlFullBodyAvatar: React.FC<CyberGirlFullBodyAvatarProps> = (
             </div>
             <Volume2 className="w-3.5 h-3.5 text-cyan-300" />
             <span className="text-[10px] font-mono font-semibold text-cyan-200 whitespace-nowrap">
-              {size === "sm" ? "Talking" : "Zoya Speaking"}
+              {size === "sm" ? "Holo Voice" : "Hologram Speaking"}
             </span>
           </>
         ) : (
           <>
-            <Radio className="w-3 h-3 text-emerald-400 shrink-0" />
+            <Radio className="w-3 h-3 text-cyan-400 shrink-0" />
             <span className="text-[10px] font-mono font-semibold text-cyan-100 whitespace-nowrap">
               {moveLabelMap[bodyMovement]}
             </span>

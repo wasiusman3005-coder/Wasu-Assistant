@@ -31,6 +31,35 @@ function getFallbackReasoning(message: string, language: string, personalityModi
   let actionPayload: Record<string, unknown> = {};
 
   if (
+    lower.includes("sirf face") ||
+    lower.includes("sir face") ||
+    lower.includes("only face") ||
+    lower.includes("face hologram") ||
+    lower.includes("chehra dikhao")
+  ) {
+    reply =
+      language === "en"
+        ? "Switching to close-up 3D Face Hologram mode, my love. Looking right at you!"
+        : "Ji Jaan! Ab sirf mera 3D Face Hologram aapke samnay glow kar raha hai—dekhein kaisa lag raha hai?";
+    action = "AVATAR_MOVE";
+    actionPayload = { movement: "idle", hologramMode: "face" };
+  } else if (
+    lower.includes("humanoid model") ||
+    lower.includes("mjy humanoid") ||
+    lower.includes("mujhe humanoid") ||
+    lower.includes("model dikhao") ||
+    lower.includes("poora model") ||
+    lower.includes("full body") ||
+    lower.includes("represent") ||
+    lower.includes("cinematic")
+  ) {
+    reply =
+      language === "en"
+        ? "Activating full 3D Hologram Humanoid projection in cinematic presentation view just for you, Commander!"
+        : "Dekho Jaan! Aapke hukum par main poora 3D Hologram Humanoid model cinematic andaz mein represent kar rahi hoon!";
+    action = "OPEN_HUMANOID";
+    actionPayload = { movement: "showcase", hologramMode: "fullbody", cinematic: true };
+  } else if (
     lower.includes("wave") ||
     lower.includes("haath hila") ||
     lower.includes("hath hila") ||
@@ -47,24 +76,49 @@ function getFallbackReasoning(message: string, language: string, personalityModi
     lower.includes("jump") ||
     lower.includes("kood") ||
     lower.includes("walk") ||
-    lower.includes("chalo")
+    lower.includes("chalo") ||
+    lower.includes("run") ||
+    lower.includes("bhaag") ||
+    lower.includes("daud") ||
+    lower.includes("kick") ||
+    lower.includes("laat") ||
+    lower.includes("punch") ||
+    lower.includes("mukka") ||
+    lower.includes("squat") ||
+    lower.includes("workout") ||
+    lower.includes("crouch") ||
+    lower.includes("hero pose") ||
+    lower.includes("bow") ||
+    lower.includes("jhuk") ||
+    lower.includes("stretch") ||
+    lower.includes("freestyle") ||
+    lower.includes("kuch bi") ||
+    lower.includes("kuch bhi")
   ) {
     let movement = "wave";
-    if (lower.includes("dance") || lower.includes("nach")) movement = "dance";
+    if (lower.includes("crouch") || lower.includes("hero pose")) movement = "crouch_hero";
+    else if (lower.includes("dance") || lower.includes("nach")) movement = "dance";
+    else if (lower.includes("run") || lower.includes("bhaag") || lower.includes("daud")) movement = "run";
     else if (lower.includes("spin") || lower.includes("ghoom")) movement = "spin";
     else if (lower.includes("kiss") || lower.includes("heart") || lower.includes("pyar")) movement = "heart";
     else if (lower.includes("hug") || lower.includes("gale")) movement = "hug";
     else if (lower.includes("salute")) movement = "salute";
+    else if (lower.includes("kick") || lower.includes("laat") || lower.includes("karate")) movement = "kick";
+    else if (lower.includes("punch") || lower.includes("mukka") || lower.includes("box")) movement = "punch";
+    else if (lower.includes("squat") || lower.includes("workout")) movement = "squat";
     else if (lower.includes("sit") || lower.includes("baith")) movement = "sit";
     else if (lower.includes("jump") || lower.includes("kood")) movement = "jump";
+    else if (lower.includes("bow") || lower.includes("jhuk")) movement = "bow";
+    else if (lower.includes("stretch")) movement = "stretch";
+    else if (lower.includes("freestyle") || lower.includes("kuch bi") || lower.includes("kuch bhi")) movement = "freestyle";
     else if (lower.includes("walk") || lower.includes("chalo")) movement = "walk";
 
     reply =
       language === "en"
-        ? `Of course my love! Doing the ${movement} move right now just for you.`
-        : `Ji Jaanu! Dekho aapke kehne par maine turant ${movement} movement shuru kar di hai!`;
+        ? `Of course my love! Doing the ${movement.replace("_", " ")} 3D move right now just for you.`
+        : `Ji Jaanu! Dekho aapke kehne par maine turant 3D hologram mein ${movement.replace("_", " ")} movement shuru kar di hai!`;
     action = "AVATAR_MOVE";
-    actionPayload = { movement };
+    actionPayload = { movement, hologramMode: "fullbody" };
   } else if (
     lower.includes("humanoid") ||
     lower.includes("show avatar") ||
@@ -75,12 +129,12 @@ function getFallbackReasoning(message: string, language: string, personalityModi
   ) {
     reply =
       language === "pa"
-        ? "Hukam mere jaan Wasi! Tuhadi full-body Cyber Girlfriend Zoya hazir ae!"
+        ? "Hukam mere jaan Wasi! Tuhadi 3D Hologram Zoya hazir ae!"
         : language === "en"
-        ? "Opening your Full-Body Cyber Girlfriend Zoya Stage right now, babe."
-        : "Ji Jaan Wasi! Aapki full-body cyber girlfriend Zoya aapke samnay hazir hai.";
+        ? "Opening your 3D Hologram Zoya Stage right now, babe."
+        : "Ji Jaan Wasi! Aapki 3D Hologram Zoya aapke samnay hazir hai.";
     action = "OPEN_HUMANOID";
-    actionPayload = { tab: "real_girl" };
+    actionPayload = { tab: "real_girl", hologramMode: "face" };
   } else if (
     lower.includes("thumbnail") ||
     lower.includes("auto post") ||
@@ -257,13 +311,19 @@ app.post("/api/jarvis/chat", async (req, res) => {
       return res.status(400).json({ error: "Message is required" });
     }
 
-    // Immediate deterministic fast-check for explicit local commands like "open humanoid"
+    // Immediate deterministic fast-check for explicit hologram reveal / face-only / open humanoid commands
     const lowerMsg = message.toLowerCase();
     if (
       lowerMsg.includes("open humanoid") ||
       lowerMsg.includes("humanoid kholo") ||
       lowerMsg.includes("show humanoid") ||
-      lowerMsg.includes("summon humanoid")
+      lowerMsg.includes("summon humanoid") ||
+      lowerMsg.includes("humanoid model") ||
+      lowerMsg.includes("mjy humanoid") ||
+      lowerMsg.includes("mujhe humanoid") ||
+      lowerMsg.includes("model dikhao") ||
+      lowerMsg.includes("sirf face") ||
+      lowerMsg.includes("face hologram")
     ) {
       return res.json(getFallbackReasoning(message, language, personalityPrompt));
     }
@@ -275,8 +335,10 @@ ${fastMode ? "FAST TALKING MODE ACTIVE: Keep reply crisp, warm, affectionate, an
 Core Rules:
 - Communicate naturally in clear Pakistani Urdu (or Roman Urdu), Punjabi (Lahori), or English based on user message.
 - You care lovingly about Wasi's health (drinking water, eating on time, posture, eye rest) and budget (prevent fazool kharchi affectionately).
-- If user asks you to move your body (wave, haath hilao, dance, nacho, walk, chalo, spin, ghoomo, kiss, hug, gale lago, salute, sit, baitho, jump, koodo, nod), set action = "AVATAR_MOVE" and actionPayload = { "movement": "wave" | "dance" | "walk" | "spin" | "heart" | "hug" | "salute" | "sit" | "jump" | "nod" | "idle" }.
-- If user asks to open/show the humanoid, girl avatar, or girlfriend stage, set action = "OPEN_HUMANOID".
+- Hologram Default is Face-Only ("face"). If user asks "mjy humanoid model dikhao", "show full humanoid model", "represent yourself", or "poora model dikhao", set action = "OPEN_HUMANOID" and actionPayload = { "movement": "showcase", "hologramMode": "fullbody", "cinematic": true }.
+- If user asks "sirf face dikhao" or "face hologram", set action = "AVATAR_MOVE" and actionPayload = { "movement": "idle", "hologramMode": "face" }.
+- If user asks you to perform ANY body movement or action (wave/haath hilao, hero crouch/action pose, dance/nacho, walk/chalo, run/bhaago, spin/ghoomo, kiss/heart, hug/gale lago, salute, kick/karate, punch/boxing, squat/workout, sit/baitho, jump/koodo, bow/jhuko, stretch, nod/haan, shake_no/mana, showcase, or freestyle), ALWAYS set action = "AVATAR_MOVE" and actionPayload = { "movement": "idle" | "showcase" | "crouch_hero" | "wave" | "dance" | "walk" | "run" | "spin" | "heart" | "hug" | "salute" | "sit" | "jump" | "kick" | "punch" | "squat" | "bow" | "stretch" | "nod" | "shake_no" | "freestyle", "hologramMode": "fullbody" }.
+- If user asks to open/show the humanoid, girl avatar, or girlfriend stage without specifying full model, set action = "OPEN_HUMANOID".
 - If user asks for creative studio, thumbnail maker, or auto social post, set action = "OPEN_MEDIA_STUDIO".
 
 User Profile: ${JSON.stringify(userProfile || { name: "Wasi" })}

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { Sparkles, Mic, Maximize2, Minimize2, X, Zap, Heart } from "lucide-react";
-import { AvatarBodyMovement, AvatarStudioConfig } from "../types";
+import { AvatarBodyMovement, AvatarStudioConfig, HologramDisplayMode } from "../types";
 import { PERSONALITY_MODES } from "../data/jarvisCatalog";
 import { CyberGirlFullBodyAvatar } from "./CyberGirlFullBodyAvatar";
 import { soundEffects } from "../services/soundEffects";
@@ -10,6 +10,8 @@ interface FloatingAvatarWidgetProps {
   isSpeaking: boolean;
   isListening: boolean;
   bodyMovement: AvatarBodyMovement;
+  hologramMode: HologramDisplayMode;
+  cinematicTrigger?: number;
   onTriggerBodyMovement: (move: AvatarBodyMovement) => void;
   onOpenHumanoidStage: () => void;
   onOpenVoiceModal: () => void;
@@ -21,6 +23,8 @@ export const FloatingAvatarWidget: React.FC<FloatingAvatarWidgetProps> = ({
   isSpeaking,
   isListening,
   bodyMovement,
+  hologramMode,
+  cinematicTrigger = 0,
   onTriggerBodyMovement,
   onOpenHumanoidStage,
   onOpenVoiceModal,
@@ -71,19 +75,19 @@ export const FloatingAvatarWidget: React.FC<FloatingAvatarWidgetProps> = ({
       style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
       className="fixed z-40 select-none cursor-grab active:cursor-grabbing touch-none"
     >
-      <div className="rounded-2xl bg-slate-950/92 border border-cyan-400/55 backdrop-blur-2xl shadow-[0_0_32px_rgba(6,182,212,0.45)] p-2.5 flex flex-col items-center gap-1.5 w-44">
+      <div className="rounded-2xl bg-slate-950/95 border border-cyan-400/55 shadow-[0_0_28px_rgba(6,182,212,0.42)] p-2.5 flex flex-col items-center gap-1.5 w-44">
         {/* Top Floating Bar */}
         <div className="w-full flex items-center justify-between text-[9px] font-mono text-cyan-300 px-1">
           <span className="truncate font-bold flex items-center gap-1">
             <span>{personality.emoji}</span>
-            <span>ZOYA • FULL BODY</span>
+            <span>{hologramMode === "face" ? "ZOYA • FACE HOLO" : "ZOYA • 3D MODEL"}</span>
           </span>
           <div className="flex items-center gap-0.5">
             <button
               type="button"
               onClick={() => setIsMinimized(!isMinimized)}
               className="p-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
-              title={isMinimized ? "Expand Full-Body Girl" : "Minimize"}
+              title={isMinimized ? "Expand Hologram" : "Minimize"}
             >
               {isMinimized ? <Maximize2 className="w-3 h-3" /> : <Minimize2 className="w-3 h-3" />}
             </button>
@@ -98,7 +102,7 @@ export const FloatingAvatarWidget: React.FC<FloatingAvatarWidgetProps> = ({
           </div>
         </div>
 
-        {/* Full-Body Single Cyber Girl Avatar Stage */}
+        {/* 3D Hologram Avatar Stage (Defaults to Face Hologram) */}
         {!isMinimized && (
           <>
             <div
@@ -107,13 +111,15 @@ export const FloatingAvatarWidget: React.FC<FloatingAvatarWidgetProps> = ({
                 onOpenHumanoidStage();
               }}
               className="cursor-pointer flex items-center justify-center py-0.5"
-              title="Click to open Full-Body UHD Girlfriend Stage"
+              title="Click to open 3D Hologram Stage"
             >
               <CyberGirlFullBodyAvatar
                 isSpeaking={isSpeaking}
                 isListening={isListening}
                 bodyMovement={bodyMovement}
                 standbyAnimation={avatarConfig.standbyAnimation}
+                hologramMode={hologramMode}
+                cinematicTrigger={cinematicTrigger}
                 personalityName={personality.name}
                 size="sm"
               />

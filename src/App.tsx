@@ -32,8 +32,13 @@ import {
   JarvisInterfaceThemeId,
   AvatarStudioConfig,
   AvatarBodyMovement,
+  HologramDisplayMode,
 } from "./types";
-import { detectBodyMovementFromText, BODY_MOVEMENT_COMMANDS } from "./utils/bodyMovementParser";
+import {
+  detectBodyMovementFromText,
+  detectHologramModeFromText,
+  BODY_MOVEMENT_COMMANDS,
+} from "./utils/bodyMovementParser";
 import { QUANTUM_THEMES, QuantumThemeColor } from "./components/AutoMorphingQuantumLogo";
 
 export default function App() {
@@ -69,7 +74,16 @@ export default function App() {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isHumanoidOpen, setIsHumanoidOpen] = useState(false);
   const [bodyMovement, setBodyMovement] = useState<AvatarBodyMovement>("idle");
+  const [hologramMode, setHologramMode] = useState<HologramDisplayMode>("face");
+  const [cinematicTrigger, setCinematicTrigger] = useState(0);
   const [outfitChangingBurst, setOutfitChangingBurst] = useState(false);
+
+  const handleChangeHologramMode = (mode: HologramDisplayMode, triggerCinematic = false) => {
+    setHologramMode(mode);
+    if (triggerCinematic) {
+      setCinematicTrigger((c) => c + 1);
+    }
+  };
 
   // Live Speech State
   const [isJarvisSpeaking, setIsJarvisSpeaking] = useState(false);
@@ -152,9 +166,24 @@ export default function App() {
         const personality =
           PERSONALITY_MODES.find((p) => p.id === avatarConfig.personalityId) || PERSONALITY_MODES[0];
 
-        // Direct body movement trigger via Wake Word!
+        // Direct hologram mode or body movement trigger via Wake Word!
+        const wakeHoloMode = detectHologramModeFromText(phrase);
         const wakeMove = detectBodyMovementFromText(phrase);
+        if (wakeHoloMode === "face" && (!wakeMove || wakeMove === "idle")) {
+          handleChangeHologramMode("face");
+          setBodyMovement("idle");
+          setIsHumanoidOpen(true);
+          speechService.speak("Ji Jaan! Ab sirf mera 3D Face Hologram aapke samnay hai.", {
+            lang: language,
+            gender: "female",
+            pitch: 1.12,
+            rate: 0.98,
+          });
+          showToast("✨ Hologram switched to Face-Only Mode!");
+          return;
+        }
         if (wakeMove) {
+          handleChangeHologramMode("fullbody", true);
           setBodyMovement(wakeMove);
           setIsHumanoidOpen(true);
           const meta = BODY_MOVEMENT_COMMANDS.find((m) => m.id === wakeMove);
@@ -169,7 +198,20 @@ export default function App() {
               elevenLabsVoiceId: avatarConfig.elevenLabsVoiceId,
             });
           }
-          showToast(`💖 Zoya Move: ${meta?.label || wakeMove}`);
+          showToast(`✨ Zoya 3D Hologram: ${meta?.label || wakeMove}`);
+          return;
+        }
+        if (wakeHoloMode === "fullbody") {
+          handleChangeHologramMode("fullbody", true);
+          setBodyMovement("showcase");
+          setIsHumanoidOpen(true);
+          speechService.speak("Dekho Jaan! Ab main poora 3D Hologram Humanoid model cinematic view mein represent kar rahi hoon!", {
+            lang: language,
+            gender: "female",
+            pitch: 1.12,
+            rate: 0.98,
+          });
+          showToast("🎬 Cinematic Full-Body 3D Humanoid Reveal!");
           return;
         }
 
@@ -180,13 +222,13 @@ export default function App() {
           phrase.includes("real girl")
         ) {
           setIsHumanoidOpen(true);
-          speechService.speak("Assalamualaikum Wasi Jaan! Dekho aapki Zoya bilkul aapke samnay khari hai.", {
+          speechService.speak("Assalamualaikum Wasi Jaan! Dekhein aapki Zoya ka 3D Face Hologram hazir hai.", {
             lang: language,
             gender: "female",
             pitch: 1.12,
             rate: 0.98,
           });
-          showToast(`✨ Wake Command '${matchedPhrase}' -> Full-Body Zoya Opened!`);
+          showToast(`✨ Wake Command '${matchedPhrase}' -> 3D Hologram Opened!`);
           return;
         }
 
@@ -379,12 +421,29 @@ export default function App() {
     soundEffects.playBeepConfirm();
 
     if (action === "AVATAR_MOVE" && payload?.movement) {
-      setBodyMovement(payload.movement as AvatarBodyMovement);
+      const nextMove = payload.movement as AvatarBodyMovement;
+      if (payload?.hologramMode === "face") {
+        handleChangeHologramMode("face");
+      } else if (payload?.hologramMode === "fullbody" || nextMove !== "idle") {
+        handleChangeHologramMode("fullbody", nextMove === "showcase");
+      }
+      setBodyMovement(nextMove);
       setIsHumanoidOpen(true);
-      showToast(`💖 Zoya Movement: ${String(payload.movement).toUpperCase()}`);
+      showToast(`✨ Zoya 3D Hologram: ${String(nextMove).toUpperCase()}`);
     } else if (action === "OPEN_HUMANOID") {
+      if (payload?.hologramMode === "fullbody" || payload?.cinematic) {
+        handleChangeHologramMode("fullbody", true);
+        setBodyMovement((payload?.movement as AvatarBodyMovement) || "showcase");
+        showToast("🎬 Cinematic 3D Humanoid Model Reveal!");
+      } else if (payload?.hologramMode === "face") {
+        handleChangeHologramMode("face");
+        setBodyMovement("idle");
+        showToast("✨ Zoya 3D Face Hologram Active!");
+      } else {
+        setIsHumanoidOpen(true);
+        showToast("✨ Zoya 3D Hologram Stage Opened!");
+      }
       setIsHumanoidOpen(true);
-      showToast("💖 Zoya Full-Body Cyber Girlfriend Stage Opened!");
     } else if (action === "OPEN_MEDIA_STUDIO" || action === "SCREEN_HELP") {
       setAppsMatrixInitialModule("studio");
       setIsAppsMatrixOpen(true);
@@ -552,7 +611,7 @@ export default function App() {
         onExecuteAction={handleExecuteVoiceAction}
       />
 
-      {/* Full-Body Cyber Girlfriend Stage Modal */}
+      {/* 3D Hologram Girlfriend Stage Modal */}
       <HumanoidCommandStage
         isOpen={isHumanoidOpen}
         onClose={() => setIsHumanoidOpen(false)}
@@ -563,15 +622,23 @@ export default function App() {
         isListening={isJarvisListening}
         bodyMovement={bodyMovement}
         onTriggerBodyMovement={(move) => setBodyMovement(move)}
+        hologramMode={hologramMode}
+        cinematicTrigger={cinematicTrigger}
+        onChangeHologramMode={handleChangeHologramMode}
       />
 
-      {/* Draggable Persistent Full-Body Floating Girlfriend Widget */}
+      {/* Draggable Persistent Floating Hologram Girlfriend Widget */}
       <FloatingAvatarWidget
         avatarConfig={avatarConfig}
         isSpeaking={isJarvisSpeaking}
         isListening={isJarvisListening}
         bodyMovement={bodyMovement}
-        onTriggerBodyMovement={(move) => setBodyMovement(move)}
+        hologramMode={hologramMode}
+        cinematicTrigger={cinematicTrigger}
+        onTriggerBodyMovement={(move) => {
+          handleChangeHologramMode("fullbody", hologramMode === "face");
+          setBodyMovement(move);
+        }}
         onOpenHumanoidStage={() => setIsHumanoidOpen(true)}
         onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
         onHideFloating={() => handleUpdateAvatarConfig({ ...avatarConfig, floatingAvatarEnabled: false })}

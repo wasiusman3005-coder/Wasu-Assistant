@@ -25,18 +25,29 @@ export type JarvisInterfaceThemeId =
 
 export type AvatarRenderMode = '2d' | 'real_girl' | 'custom_2d' | 'custom_3d';
 export type StandbyAnimationType = 'breathe' | 'float' | 'pulse' | 'sway';
+export type HologramDisplayMode = 'face' | 'fullbody';
 export type AvatarBodyMovement =
   | 'idle'
+  | 'showcase'
+  | 'crouch_hero'
   | 'wave'
   | 'dance'
   | 'walk'
+  | 'run'
   | 'spin'
   | 'heart'
   | 'hug'
   | 'salute'
   | 'sit'
   | 'jump'
-  | 'nod';
+  | 'kick'
+  | 'punch'
+  | 'squat'
+  | 'bow'
+  | 'stretch'
+  | 'nod'
+  | 'shake_no'
+  | 'freestyle';
 
 export interface AvatarStudioConfig {
   mode: AvatarRenderMode;
