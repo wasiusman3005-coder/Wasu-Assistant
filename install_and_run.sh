@@ -23,8 +23,8 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 
-if [ ! -d "node_modules" ]; then
-  npm install
+if [ ! -f "node_modules/.bin/vite" ]; then
+  npm install || npm install --legacy-peer-deps
 fi
 npm run build
 

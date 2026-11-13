@@ -25,9 +25,19 @@ class SpeechService {
     fastMode: true,
   };
 
+  private cachedVoices: SpeechSynthesisVoice[] = [];
+
   constructor() {
     this.initRecognition();
     this.initWakeWordDetector();
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      const loadVoices = () => {
+        const list = window.speechSynthesis.getVoices();
+        if (list.length > 0) this.cachedVoices = list;
+      };
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
   }
 
   public setWakeWords(extraWords: string[] = []) {
@@ -232,8 +242,8 @@ class SpeechService {
   /**
    * High-Fidelity Pakistani Urdu Female & Multi-Engine Speech Generator:
    * 1) ElevenLabs (if enabled & server-configured)
-   * 2) Gemini Neural TTS (always prioritized for crystal-clear Pakistani Urdu accent)
-   * 3) Zero-latency Browser SpeechSynthesis (ur-PK female preferred)
+   * 2) Server Neural TTS (Gemini Korean/Kore OR Free Pakistani Urdu Microsoft Edge ur-PK-UzmaNeural)
+   * 3) Zero-latency Browser SpeechSynthesis (strictly female, preferring ur-PK / hi-IN / en-IN female)
    */
   public async speak(
     text: string,
@@ -300,15 +310,15 @@ class SpeechService {
           }
         }
       } catch {
-        // Fall through to Gemini / Browser TTS
+        // Fall through to Gemini / Edge-TTS / Browser TTS
       }
     }
 
-    // 2. Server-side Gemini Neural TTS (Always prioritized for crystal-clear Pakistani Urdu & Punjabi!)
+    // 2. Server-side Neural TTS (Gemini TTS or free Python edge-tts ur-PK-UzmaNeural Pakistani Urdu Female!)
     try {
-      const serverGender = gender === "custom" ? (options.pitch && options.pitch < 1.0 ? "male" : "female") : gender;
+      const serverGender = gender === "male" ? "male" : "female";
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
       const res = await fetch("/api/jarvis/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -375,40 +385,58 @@ class SpeechService {
     window.speechSynthesis.cancel();
 
     const { lang = "ur", gender = "female", rate = 0.98, pitch } = options;
+    const isMaleRequested = gender === "male";
     const utterance = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
+
+    const liveVoices = window.speechSynthesis.getVoices();
+    const voices = liveVoices.length > 0 ? liveVoices : this.cachedVoices;
+
+    const isMaleVoiceName = (name: string) =>
+      /\b(david|mark|george|daniel|alex|asad|ravi|hemant|richard|guy|ryan|andrew|james|steffan|christopher|eric|roger|male)\b/i.test(
+        name
+      ) && !/\bfemale\b/i.test(name);
+
+    const isFemaleVoiceName = (name: string) =>
+      /(uzma|zira|aria|jenny|sonia|hazel|libby|samantha|swara|heera|kalpana|neerja|priya|lekha|female)/i.test(name);
+
+    const pool = isMaleRequested ? voices : voices.filter((v) => !isMaleVoiceName(v.name));
+    const searchPool = pool.length > 0 ? pool : voices;
 
     let selectedVoice: SpeechSynthesisVoice | null = null;
 
-    if (lang === "ur") {
-      utterance.lang = "ur-PK";
+    if (lang === "ur" || lang === "pa") {
+      utterance.lang = lang === "pa" ? "pa-IN" : "ur-PK";
       selectedVoice =
-        voices.find(
+        searchPool.find(
           (v) =>
             v.lang.toLowerCase().includes("ur-pk") &&
-            (v.name.includes("Uzma") || v.name.toLowerCase().includes("female"))
+            (isFemaleVoiceName(v.name) || !isMaleVoiceName(v.name))
         ) ||
-        voices.find((v) => v.lang.toLowerCase().startsWith("ur-pk") || v.name.includes("Uzma") || v.name.includes("Urdu")) ||
-        voices.find((v) => v.lang.toLowerCase().startsWith("ur")) ||
-        voices.find((v) => v.lang.toLowerCase().startsWith("hi-in") && (v.name.includes("Swara") || v.name.includes("Google"))) ||
-        null;
-    } else if (lang === "pa") {
-      utterance.lang = "pa-IN";
-      selectedVoice =
-        voices.find((v) => v.lang.startsWith("pa") || v.name.includes("Punjabi")) ||
-        voices.find((v) => v.lang.startsWith("ur")) ||
-        voices.find((v) => v.lang.startsWith("hi-IN")) ||
+        searchPool.find((v) => v.lang.toLowerCase().startsWith("ur") || v.name.toLowerCase().includes("urdu")) ||
+        searchPool.find((v) => v.lang.toLowerCase().startsWith("pa") || v.name.toLowerCase().includes("punjabi")) ||
+        searchPool.find(
+          (v) =>
+            v.lang.toLowerCase().startsWith("hi-in") &&
+            (isFemaleVoiceName(v.name) || !isMaleVoiceName(v.name))
+        ) ||
+        searchPool.find(
+          (v) =>
+            v.lang.toLowerCase().startsWith("en-in") &&
+            (isFemaleVoiceName(v.name) || !isMaleVoiceName(v.name))
+        ) ||
+        searchPool.find((v) => isFemaleVoiceName(v.name)) ||
+        searchPool[0] ||
         null;
     } else {
       utterance.lang = "en-US";
       selectedVoice =
-        voices.find((v) =>
-          gender === "female"
-            ? v.name.includes("Zira") || v.name.includes("Aria") || v.name.includes("Samantha") || v.name.includes("Google UK English Female")
-            : v.name.includes("Jarvis") || v.name.includes("David") || v.name.includes("Daniel") || v.name.includes("George")
+        searchPool.find((v) =>
+          isMaleRequested
+            ? isMaleVoiceName(v.name)
+            : isFemaleVoiceName(v.name)
         ) ||
-        voices.find((v) => v.lang.startsWith("en-US") || v.lang.startsWith("en-GB")) ||
-        voices[0] ||
+        searchPool.find((v) => v.lang.startsWith("en-GB") || v.lang.startsWith("en-US") || v.lang.startsWith("en-IN")) ||
+        searchPool[0] ||
         null;
     }
 
@@ -418,9 +446,9 @@ class SpeechService {
 
     utterance.rate = Math.min(1.06, Math.max(0.9, rate));
     if (pitch !== undefined) {
-      utterance.pitch = pitch;
+      utterance.pitch = isMaleRequested ? pitch : Math.max(pitch, 1.12);
     } else {
-      utterance.pitch = gender === "male" ? 0.88 : 1.12;
+      utterance.pitch = isMaleRequested ? 0.88 : 1.16;
     }
 
     utterance.onstart = () => {

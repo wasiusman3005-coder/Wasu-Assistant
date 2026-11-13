@@ -525,8 +525,8 @@ export const QuantumSettingsModal: React.FC<QuantumSettingsModalProps> = ({
                 </h3>
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { id: "ur" as const, name: "اردو (Urdu)", desc: "Pakistani National Clear Accent" },
-                    { id: "pa" as const, name: "ਪੰਜਾਬੀ (Punjabi)", desc: "Lahori Crisp Regional Accent" },
+                    { id: "ur" as const, name: "\u0627\u0631\u062f\u0648 (Urdu)", desc: "Pakistani National Clear Accent" },
+                    { id: "pa" as const, name: "\u0a2a\u0a70\u0a1c\u0a3e\u0a2c\u0a40 (Punjabi)", desc: "Lahori Crisp Regional Accent" },
                     { id: "en" as const, name: "English (EN)", desc: "Jarvis Neural Cyber Accent" },
                   ].map((item) => (
                     <button
@@ -859,7 +859,7 @@ export const QuantumSettingsModal: React.FC<QuantumSettingsModalProps> = ({
                         <div>
                           <div className="font-bold text-xs text-slate-100">{v.name}</div>
                           <div className="text-[10px] text-slate-500">
-                            Pitch: {v.pitch}x • Speed: {v.rate}x • {v.gender.toUpperCase()}
+                            Pitch: {v.pitch}x {"\u2022"} Speed: {v.rate}x {"\u2022"} {v.gender.toUpperCase()}
                           </div>
                         </div>
 
@@ -1012,8 +1012,9 @@ export const QuantumSettingsModal: React.FC<QuantumSettingsModalProps> = ({
                   </select>
                 </div>
 
-                <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 text-amber-300 text-[11px]">
-                  🛡️ Jab yeh timer poora hoga to Jarvis poore PC ko mandatory rest mode mein daal dega taake aapki aankhon aur kamar ko sakoon mil sake.
+                <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30 text-amber-300 text-[11px] flex items-center gap-2">
+                  <Shield className="w-4 h-4 shrink-0" />
+                  <span>Jab yeh timer poora hoga to Jarvis poore PC ko mandatory rest mode mein daal dega taake aapki aankhon aur kamar ko sakoon mil sake.</span>
                 </div>
               </div>
             </div>
@@ -1063,7 +1064,7 @@ export const QuantumSettingsModal: React.FC<QuantumSettingsModalProps> = ({
         {/* Footer */}
         <div className="px-6 py-3.5 bg-slate-900 border-t border-slate-800 flex items-center justify-between">
           <div className="text-[11px] font-mono text-slate-400">
-            Current Theme: <span className="text-cyan-400 font-bold uppercase">{customization.accentTheme}</span> • Voice: <span className="text-purple-400 uppercase font-bold">{customization.activeVoiceMode}</span>
+            Current Theme: <span className="text-cyan-400 font-bold uppercase">{customization.accentTheme}</span> {"\u2022"} Voice: <span className="text-purple-400 uppercase font-bold">{customization.activeVoiceMode}</span>
           </div>
           <button
             onClick={onClose}

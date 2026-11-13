@@ -90,7 +90,7 @@ export const defaultUserProfile: UserProfile = {
     "OBS Studio",
   ],
   personalNotes: [
-    "Main PC Specs: AMD Ryzen 9 7950X, RTX 4090 24GB, 64GB DDR5, 4TB Gen4 NVMe",
+    "Workstation Telemetry: Synced live with Host PC Hardware Probe",
     "Diet Priority: High protein, clean meals, avoid late night snacks & oily food",
     "Workout: Evening 6:00 PM - 7:00 PM (Strength & Cardio)",
     "Financial Policy: Always save 30% of earnings; analyze before buying non-essentials",

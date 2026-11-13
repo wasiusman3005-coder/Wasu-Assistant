@@ -40,8 +40,12 @@ python -m pip install --upgrade pip >nul
 pip install -r requirements.txt
 
 echo [3/4] Installing Node dependencies & compiling 4K UHD bundle...
-if not exist "node_modules" (
+if not exist "node_modules\.bin\vite.cmd" (
     call npm install
+    if errorlevel 1 (
+        echo [INFO] Retrying npm install with --legacy-peer-deps...
+        call npm install --legacy-peer-deps
+    )
 )
 call npm run build
 

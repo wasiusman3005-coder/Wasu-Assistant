@@ -44,7 +44,7 @@ const PRESET_LOCATIONS: MapLocationItem[] = [
     category: "base",
     lat: 31.5204,
     lng: 74.3587,
-    description: "Primary Quantum Tachyon OS Workstation (Ryzen 9 7950X / RTX 4090 Core).",
+    description: "Primary Quantum Tachyon OS Host PC Workstation Node.",
     accuracyMeters: 2,
   },
   {

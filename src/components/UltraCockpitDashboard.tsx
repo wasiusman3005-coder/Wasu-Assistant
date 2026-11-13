@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { soundEffects } from "../services/soundEffects";
 import { speechService } from "../services/speechService";
+import { fetchSystemTelemetry, fetchSystemFiles, SystemTelemetry } from "../services/systemTelemetry";
 import { UserProfile, DashboardCustomization, LanguageCode, VoiceGender, JarvisInterfaceThemeId } from "../types";
 import { QuantumThemeColor } from "./AutoMorphingQuantumLogo";
 import { ALL_JARVIS_THEMES } from "./themes/themesData";
@@ -121,11 +122,11 @@ export const UltraCockpitDashboard: React.FC<UltraCockpitDashboardProps> = ({
   const [cipherRotationTimer, setCipherRotationTimer] = useState(26);
   const [activeCipherKey, setActiveCipherKey] = useState("0x7F4A...B9C2_LATTICE");
 
-  // Telemetry fluctuation
-  const [cpuUsage, setCpuUsage] = useState(24);
-  const [gpuUsage, setGpuUsage] = useState(38);
-  const [ramUsedGb, setRamUsedGb] = useState(21.4);
-  const [networkSpeed, setNetworkSpeed] = useState(942);
+  // Live Real Host PC Telemetry
+  const [hostTelemetry, setHostTelemetry] = useState<SystemTelemetry | null>(null);
+  const [realAssetCapsules, setRealAssetCapsules] = useState<
+    { name: string; size: string; type: string; mod: string }[]
+  >([]);
 
   // Rotating Core Radar Degree
   const [coreDegree, setCoreDegree] = useState(0);
@@ -186,15 +187,33 @@ export const UltraCockpitDashboard: React.FC<UltraCockpitDashboardProps> = ({
     }
   }, [cipherRotationTimer]);
 
-  // Fluctuate stats
+  // Poll Real Host PC Hardware & Files
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCpuUsage((prev) => Math.min(65, Math.max(14, prev + Math.floor(Math.random() * 7 - 3))));
-      setGpuUsage((prev) => Math.min(80, Math.max(22, prev + Math.floor(Math.random() * 9 - 4))));
-      setRamUsedGb((prev) => parseFloat(Math.min(38, Math.max(18, prev + (Math.random() * 0.4 - 0.2))).toFixed(1)));
-      setNetworkSpeed((prev) => (isAirGapActive ? 0 : Math.min(990, Math.max(910, prev + Math.floor(Math.random() * 11 - 5)))));
-    }, 3000);
-    return () => clearInterval(interval);
+    let cancelled = false;
+    const poll = async () => {
+      const data = await fetchSystemTelemetry();
+      if (!cancelled && data) setHostTelemetry(data);
+    };
+    const loadFiles = async () => {
+      const files = await fetchSystemFiles();
+      if (!cancelled && files.length > 0) {
+        setRealAssetCapsules(
+          files.slice(0, 6).map((f) => ({
+            name: f.name,
+            size: f.size,
+            type: f.type,
+            mod: "desktop",
+          }))
+        );
+      }
+    };
+    poll();
+    loadFiles();
+    const interval = setInterval(poll, 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [isAirGapActive]);
 
   // Listen to remote / voice privacy events
@@ -237,15 +256,18 @@ export const UltraCockpitDashboard: React.FC<UltraCockpitDashboardProps> = ({
     setIsAirGapActive((prev) => !prev);
   };
 
-  // Asset capsules list for the Middle-Left capsule grid (matches 2x3 grid in reference image)
-  const assetCapsules = [
-    { name: "auth_core.ts", size: "24 KB", type: "code", mod: "desktop" },
-    { name: "render_4k.prproj", size: "1.4 GB", type: "video", mod: "desktop" },
-    { name: "quantum_vault.db", size: "84 MB", type: "db", mod: "records" },
-    { name: "satellite_gps.osm", size: "12 MB", type: "map", mod: "maps" },
-    { name: "biometric_key.pem", size: "4 KB", type: "sec", mod: "devices" },
-    { name: "docker_mesh.yaml", size: "8 KB", type: "sys", mod: "automation" },
-  ];
+  // Real Host PC files (or clean fallback placeholders until host files load)
+  const assetCapsules =
+    realAssetCapsules.length > 0
+      ? realAssetCapsules
+      : [
+          { name: hostTelemetry?.hostname ? `${hostTelemetry.hostname}.sys` : "Scanning PC...", size: "--", type: "sys", mod: "desktop" },
+          { name: "Desktop Files", size: "Open", type: "code", mod: "desktop" },
+          { name: "Downloads", size: "Open", type: "archive", mod: "desktop" },
+          { name: "Documents", size: "Open", type: "doc", mod: "records" },
+          { name: "Devices Sync", size: "Live", type: "sec", mod: "devices" },
+          { name: "Workflow Shell", size: "CLI", type: "sys", mod: "automation" },
+        ];
 
   return (
     <div className="relative w-full min-h-screen bg-[#02040a] text-slate-100 flex flex-col justify-between p-2 md:p-4 select-none font-rajdhani overflow-x-hidden">
@@ -672,48 +694,67 @@ export const UltraCockpitDashboard: React.FC<UltraCockpitDashboardProps> = ({
             </div>
           </div>
 
-          {/* Screen 3: Lower-Left (Horizontal Telemetry & Kernel Status) */}
+          {/* Screen 3: Lower-Left (Real Host PC Telemetry & Kernel Status) */}
           <div
-            onClick={() => onOpenModule && onOpenModule("automation")}
+            onClick={() => onOpenModule && onOpenModule("desktop")}
             className="p-3.5 rounded-2xl bg-slate-950/85 border border-cyan-500/40 hover:border-cyan-400 backdrop-blur-xl shadow-xl shadow-cyan-950/40 transition cursor-pointer"
           >
-            <div className="flex items-center justify-between text-xs font-mono text-slate-400 mb-1.5">
-              <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+            <div className="flex items-center justify-between text-xs font-mono text-slate-400 mb-1.5 gap-2">
+              <span className="flex items-center gap-1.5 text-emerald-400 font-bold shrink-0">
                 <Activity className="w-3.5 h-3.5" />
                 <span>HOST OS KERNEL</span>
               </span>
-              <span className="text-[9px] text-cyan-300">AMD 7950X</span>
+              <span className="text-[9px] text-cyan-300 truncate max-w-[160px]">
+                {hostTelemetry?.hostname || "LOCAL-PC"}
+              </span>
             </div>
 
-            {/* Horizontal Gauges matching picture */}
+            {/* Live Horizontal Gauges */}
             <div className="space-y-1.5 text-[11px] font-mono">
               <div>
-                <div className="flex justify-between text-slate-400 mb-0.5">
-                  <span>CPU 16-Core</span>
-                  <span className="text-cyan-300">{cpuUsage}%</span>
+                <div className="flex justify-between text-slate-400 mb-0.5 gap-2">
+                  <span className="truncate">
+                    {hostTelemetry ? `${hostTelemetry.cpuModel} (${hostTelemetry.cpuCores}C)` : "Scanning CPU..."}
+                  </span>
+                  <span className="text-cyan-300 shrink-0">
+                    {hostTelemetry ? `${hostTelemetry.cpuUsagePercent}%` : "--"}
+                  </span>
                 </div>
                 <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
-                  <div className="bg-cyan-400 h-full transition-all" style={{ width: `${cpuUsage}%` }}></div>
+                  <div
+                    className="bg-cyan-400 h-full transition-all"
+                    style={{ width: `${hostTelemetry?.cpuUsagePercent || 0}%` }}
+                  ></div>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-slate-400 mb-0.5 gap-2">
+                  <span className="truncate">{hostTelemetry?.gpuName || "Scanning GPU..."}</span>
+                  <span className="text-purple-300 shrink-0">
+                    {hostTelemetry?.gpuVramGb ? `${hostTelemetry.gpuVramGb} GB` : "ACTIVE"}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                  <div
+                    className="bg-purple-400 h-full transition-all"
+                    style={{ width: hostTelemetry ? "100%" : "0%" }}
+                  ></div>
                 </div>
               </div>
 
               <div>
                 <div className="flex justify-between text-slate-400 mb-0.5">
-                  <span>RTX 4090 GPU</span>
-                  <span className="text-purple-300">{gpuUsage}%</span>
+                  <span>Host RAM</span>
+                  <span className="text-emerald-300">
+                    {hostTelemetry ? `${hostTelemetry.ramUsedGb} / ${hostTelemetry.ramTotalGb} GB` : "--"}
+                  </span>
                 </div>
                 <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
-                  <div className="bg-purple-400 h-full transition-all" style={{ width: `${gpuUsage}%` }}></div>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between text-slate-400 mb-0.5">
-                  <span>DDR5 RAM</span>
-                  <span className="text-emerald-300">{ramUsedGb} GB</span>
-                </div>
-                <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
-                  <div className="bg-emerald-400 h-full transition-all" style={{ width: `${(ramUsedGb / 64) * 100}%` }}></div>
+                  <div
+                    className="bg-emerald-400 h-full transition-all"
+                    style={{ width: `${hostTelemetry?.ramPercent || 0}%` }}
+                  ></div>
                 </div>
               </div>
             </div>

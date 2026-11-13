@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Smartphone,
   Tablet,
   Watch,
+  Monitor,
   Lightbulb,
   Headphones,
   Plug,
@@ -35,6 +36,7 @@ import {
 } from "lucide-react";
 import { soundEffects } from "../services/soundEffects";
 import { speechService } from "../services/speechService";
+import { fetchSystemTelemetry } from "../services/systemTelemetry";
 import {
   LanguageCode,
   VoiceGender,
@@ -56,8 +58,28 @@ export const DigitalDeviceBridgeSuite: React.FC<DigitalDeviceBridgeSuiteProps> =
 }) => {
   const [activeTab, setActiveTab] = useState<"devices" | "iot_studio" | "pairing" | "logs">("devices");
 
-  // Initial Connected Devices State
+  // Initial Connected Devices State (Host PC is synced live first)
   const [devices, setDevices] = useState<ConnectedDeviceItem[]>([
+    {
+      id: "dev-host-pc",
+      name: "This Host PC (Connecting...)",
+      type: "pc",
+      model: "Probing Host Hardware...",
+      osVersion: "Detecting OS...",
+      protocol: "WiFi_LAN",
+      ipAddress: "127.0.0.1",
+      status: "online",
+      lastPing: "Live",
+      paired: true,
+      controllableStates: {
+        power: true,
+      },
+      metrics: {
+        storageUsedGb: 0,
+        storageTotalGb: 0,
+        ramUsedPercent: 0,
+      },
+    },
     {
       id: "dev-mob-1",
       name: "Commander Mobile (Galaxy S24 Ultra)",
@@ -181,8 +203,44 @@ export const DigitalDeviceBridgeSuite: React.FC<DigitalDeviceBridgeSuiteProps> =
     },
   ]);
 
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("dev-mob-1");
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("dev-host-pc");
   const selectedDevice = devices.find((d) => d.id === selectedDeviceId) || devices[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    const syncHostPc = async () => {
+      const tel = await fetchSystemTelemetry();
+      if (cancelled || !tel) return;
+      setDevices((prev) =>
+        prev.map((d) =>
+          d.id === "dev-host-pc"
+            ? {
+                ...d,
+                name: `${tel.hostname} (This PC)`,
+                model: `${tel.cpuModel} • ${tel.gpuName}`,
+                osVersion: tel.osCaption,
+                ipAddress: tel.ipAddress,
+                batteryPercent: tel.batteryPercent ?? undefined,
+                isCharging: tel.isCharging ?? undefined,
+                status: "online",
+                lastPing: "Live Host",
+                metrics: {
+                  storageUsedGb: tel.primaryDisk.usedGb,
+                  storageTotalGb: tel.primaryDisk.totalGb,
+                  ramUsedPercent: tel.ramPercent,
+                },
+              }
+            : d
+        )
+      );
+    };
+    syncHostPc();
+    const timer = setInterval(syncHostPc, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
 
   // Device Command Logs
   const [logs, setLogs] = useState<DeviceCommandLog[]>([
@@ -513,11 +571,13 @@ export const DigitalDeviceBridgeSuite: React.FC<DigitalDeviceBridgeSuiteProps> =
             </div>
 
             {devices
-              .filter((d) => d.type === "mobile" || d.type === "tablet" || d.type === "wearable")
+              .filter((d) => d.type === "pc" || d.type === "mobile" || d.type === "tablet" || d.type === "wearable")
               .map((device) => {
                 const isSelected = selectedDevice.id === device.id;
                 const IconComp =
-                  device.type === "mobile"
+                  device.type === "pc"
+                    ? Monitor
+                    : device.type === "mobile"
                     ? Smartphone
                     : device.type === "tablet"
                     ? Tablet

@@ -285,7 +285,7 @@ export interface JiraGitHubIssueItem {
   status: 'Backlog' | 'In Progress' | 'Done';
 }
 
-export type DeviceType = 'mobile' | 'tablet' | 'wearable' | 'smart_light' | 'audio_dac' | 'smart_plug' | 'peripherals';
+export type DeviceType = 'pc' | 'mobile' | 'tablet' | 'wearable' | 'smart_light' | 'audio_dac' | 'smart_plug' | 'peripherals';
 export type DeviceConnectionProtocol = 'BLE' | 'WiFi_LAN' | 'USB_C' | 'Cloud_Relay';
 
 export interface ConnectedDeviceItem {

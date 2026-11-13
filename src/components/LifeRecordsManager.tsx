@@ -32,9 +32,9 @@ const defaultLifeRecords: LifeRecord[] = [
   },
   {
     id: "rec-3",
-    title: "Personal PC Hardware Configurations & Overclock",
+    title: "Host PC Workstation Profile & Performance Rules",
     category: "tech",
-    content: "Ryzen 9 7950X PBO Curve Optimizer -20 all cores, RTX 4090 power target 85%, DDR5 6000MHz EXPO profile 1.",
+    content: "Live Host PC hardware probe active in PC & Video Suite; prioritize SSD cache cleanup before 4K renders.",
     dateCreated: "Saved",
     priority: "medium",
   },

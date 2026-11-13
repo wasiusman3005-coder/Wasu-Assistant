@@ -1,7 +1,17 @@
 import express from "express";
 import path from "path";
+import os from "os";
+import fs from "fs/promises";
+import crypto from "crypto";
+import { execFile, spawn } from "child_process";
+import { promisify } from "util";
+import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+
+const execFileAsync = promisify(execFile);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -724,69 +734,778 @@ app.post("/api/jarvis/daily-briefing", async (req, res) => {
   }
 });
 
-// Server-side High-Fidelity TTS Endpoint (Urdu & Punjabi Native Accent)
+// Convert Roman Urdu phrases into authentic Urdu script so Pakistani Neural TTS pronounces them natively
+const ROMAN_TO_URDU_MAP: Record<string, string> = {
+  assalamualaikum: "السلام علیکم",
+  assalam: "السلام",
+  alaikum: "علیکم",
+  salam: "سلام",
+  khush: "خوش",
+  amdeed: "آمدید",
+  wasi: "وصی",
+  haris: "حارث",
+  zoya: "زویا",
+  jaan: "جان",
+  jaani: "جانی",
+  sahab: "صاحب",
+  paji: "پا جی",
+  ji: "جی",
+  main: "میں",
+  mein: "میں",
+  mn: "میں",
+  aap: "آپ",
+  ap: "آپ",
+  aapka: "آپ کا",
+  aapki: "آپ کی",
+  aapke: "آپ کے",
+  apka: "آپ کا",
+  apki: "آپ کی",
+  apke: "آپ کے",
+  tum: "تم",
+  tumhara: "تمہارا",
+  tumhari: "تمہاری",
+  tumhare: "تمہارے",
+  mera: "میرا",
+  meri: "میری",
+  mere: "میرے",
+  hamara: "ہمارا",
+  hamari: "ہماری",
+  hum: "ہم",
+  hoon: "ہوں",
+  hun: "ہوں",
+  hai: "ہے",
+  ha: "ہے",
+  hain: "ہیں",
+  hn: "ہیں",
+  ho: "ہو",
+  tha: "تھا",
+  thi: "تھی",
+  the: "تھے",
+  kya: "کیا",
+  kia: "کیا",
+  kaun: "کون",
+  kon: "کون",
+  kaise: "کیسے",
+  kaisi: "کیسی",
+  kaisa: "کیسا",
+  kahan: "کہاں",
+  kab: "کب",
+  kyun: "کیوں",
+  kyu: "کیوں",
+  haan: "ہاں",
+  han: "ہاں",
+  nahi: "نہیں",
+  nhi: "نہیں",
+  na: "نہ",
+  mat: "مت",
+  jiya: "جیا",
+  bohat: "بہت",
+  bahut: "بہت",
+  bht: "بہت",
+  zyada: "زیادہ",
+  kam: "کم",
+  accha: "اچھا",
+  acha: "اچھا",
+  acchi: "اچھی",
+  achi: "اچھی",
+  theek: "ٹھیک",
+  thik: "ٹھیک",
+  thk: "ٹھیک",
+  bilkul: "بالکل",
+  shukriya: "شکریہ",
+  meharbani: "مہربانی",
+  pyaar: "پیار",
+  pyar: "پیار",
+  mohabbat: "محبت",
+  dil: "دل",
+  khayal: "خیال",
+  khushi: "خوشی",
+  sakoon: "سکون",
+  aaram: "آرام",
+  paani: "پانی",
+  pani: "پانی",
+  pi: "پی",
+  lo: "لو",
+  kar: "کر",
+  karo: "کرو",
+  karein: "کریں",
+  karti: "کرتی",
+  karta: "کرتا",
+  rahi: "رہی",
+  raha: "رہا",
+  rahe: "رہے",
+  diya: "دیا",
+  de: "دے",
+  do: "دو",
+  le: "لے",
+  liya: "لیا",
+  gaya: "گیا",
+  gayi: "گئی",
+  gaye: "گئے",
+  aa: "آ",
+  aaj: "آج",
+  ajj: "آج",
+  abhi: "ابھی",
+  abi: "ابھی",
+  ab: "اب",
+  phir: "پھر",
+  phr: "پھر",
+  aur: "اور",
+  or: "اور",
+  ya: "یا",
+  ka: "کا",
+  ki: "کی",
+  ke: "کے",
+  ko: "کو",
+  se: "سے",
+  par: "پر",
+  pa: "پر",
+  pe: "پر",
+  liye: "لیے",
+  sab: "سب",
+  saara: "سارا",
+  sari: "ساری",
+  tamam: "تمام",
+  kuch: "کچھ",
+  sirf: "صرف",
+  poora: "پورا",
+  pori: "پوری",
+  saaf: "صاف",
+  clear: "صاف",
+  nazar: "نظر",
+  dekho: "دیکھو",
+  dekhein: "دیکھیں",
+  dikhao: "دکھاؤ",
+  batao: "بتاؤ",
+  bata: "بتا",
+  sunao: "سناؤ",
+  suno: "سنو",
+  bolo: "بولو",
+  baat: "بات",
+  samnay: "سامنے",
+  saamne: "سامنے",
+  hath: "ہاتھ",
+  haath: "ہاتھ",
+  hilao: "ہلاؤ",
+  ghoom: "گھوم",
+  jao: "جاؤ",
+  naach: "ناچ",
+  kood: "کود",
+  baith: "بیٹھ",
+  khadi: "کھڑی",
+  hazir: "حاضر",
+  tayar: "تیار",
+  tayyar: "تیار",
+  hukum: "حکم",
+  chalta: "چلتا",
+  chal: "چل",
+  chalo: "چلو",
+  band: "بند",
+  khol: "کول",
+  open: "اوپن",
+  behtareen: "بہترین",
+  kamaal: "کمال",
+  kamal: "کمال",
+  zabardast: "زبردست",
+  mubarak: "مبارک",
+  chehra: "چہرہ",
+  face: "چہرہ",
+  naye: "نئے",
+  naya: "نیا",
+  nayi: "نئی",
+  waqt: "وقت",
+  dost: "دوست",
+  hamesha: "ہمیشہ",
+  saath: "ساتھ",
+  sath: "ساتھ",
+  zindagi: "زندگی",
+  dua: "دعا",
+  khuda: "خدا",
+  hafiz: "حافظ",
+  allah: "اللہ",
+  mukammal: "مکمل",
+  kaam: "کام",
+  kamyabi: "کامیابی",
+  aankhon: "آنکھوں",
+  sehat: "صحت",
+  zarori: "ضروری",
+  zaroori: "ضروری",
+  mujhse: "مجھ سے",
+  mujhe: "مجھے",
+  mjy: "مجھے",
+  tujhe: "تجھے",
+  humse: "ہم سے",
+  iske: "اس کے",
+  iski: "اس کی",
+  iska: "اس کا",
+  yeh: "یہ",
+  ye: "یہ",
+  woh: "وہ",
+  wo: "وہ",
+  agar: "اگر",
+  lekin: "لیکن",
+  magar: "مگر",
+  kyunke: "کیونکہ",
+  taake: "تاکہ",
+  jab: "جب",
+  tab: "تب",
+  waise: "ویسے",
+  bhi: "بھی",
+  bi: "بھی",
+  toh: "تو",
+  to: "تو",
+  hi: "ہی",
+  e: "ہی",
+  punjabi: "پنجابی",
+  urdu: "اردو",
+  pakistani: "پاکستانی",
+  sat: "ست",
+  sri: "سری",
+  akal: "اکال",
+  vadiya: "ودھیا",
+  reha: "رہا",
+  changa: "چنگا",
+  tussi: "تسی",
+  oh: "اوہ",
+  ae: "اے",
+  ne: "نے",
+  hardware: "ہارڈویئر",
+  system: "سسٹم",
+  systems: "سسٹمز",
+  check: "چیک",
+  verify: "تصدیق",
+  verified: "تصدیق شدہ",
+  online: "آن لائن",
+  suite: "سوٹ",
+  editing: "ایڈیٹنگ",
+  health: "صحت",
+  guard: "گارڈ",
+  guards: "گارڈز",
+  launch: "لانچ",
+  close: "بند",
+  organize: "آرگنائز",
+  files: "فائلز",
+  desktop: "ڈیسک ٹاپ",
+  downloads: "ڈاؤن لوڈز",
+  mutaluqa: "متعلقہ",
+  folders: "فولڈرز",
+  parda: "پردہ",
+  privacy: "پرائیویسی",
+  active: "ایکٹو",
+  cloak: "کلوک",
+  redact: "محفوظ",
+  commander: "کمانڈر",
+  welcome: "خوش آمدید",
+  hologram: "ہولوگرام",
+  chuke: "چکے",
+  chuki: "چکی",
+};
+
+function toPakistaniUrduSpeechText(input: string): string {
+  // If already predominantly Arabic/Urdu script, return directly
+  const arabicChars = (input.match(/[\u0600-\u06FF]/g) || []).length;
+  if (arabicChars > input.length * 0.3) {
+    return input;
+  }
+  return input
+    .split(/(\b[A-Za-z']+\b)/g)
+    .map((token) => {
+      const lower = token.toLowerCase();
+      return ROMAN_TO_URDU_MAP[lower] || token;
+    })
+    .join("");
+}
+
+// Server-side High-Fidelity Pakistani Urdu Female & Multi-Engine TTS Endpoint
 app.post("/api/jarvis/tts", async (req, res) => {
   try {
-    const { text, language = "ur", gender = "male" } = req.body;
+    const { text, language = "ur", gender = "female" } = req.body;
 
     if (!text || typeof text !== "string") {
       return res.status(400).json({ error: "Text is required" });
     }
 
-    if (!ai) {
-      return res.status(200).json({ fallbackToBrowser: true });
-    }
+    const isMale = gender === "male";
+    const spokenText = language === "ur" || language === "pa" ? toPakistaniUrduSpeechText(text) : text;
 
-    try {
-      const voiceName = gender === "male" ? "Fenrir" : "Kore";
-      const accentStyle =
-        language === "pa"
-          ? "Fluent native Pakistani young woman from Lahore speaking crystal clear Lahori Punjabi and Urdu with warm feminine affection"
-          : language === "en"
-          ? "Warm, affectionate young female AI companion voice with gentle playful charm"
-          : "Fluent native Pakistani young woman from Islamabad and Lahore speaking crystal-clear, natural, affectionate Pakistani Urdu with clean feminine pronunciation";
+    // Tier 1: Gemini Neural TTS when API key is configured
+    if (ai) {
+      try {
+        const voiceName = isMale ? "Fenrir" : "Kore";
+        const accentStyle =
+          language === "pa"
+            ? "Fluent native Pakistani young woman from Lahore speaking crystal clear Lahori Punjabi and Urdu with warm feminine affection"
+            : language === "en"
+            ? "Warm, affectionate young female AI companion voice speaking crisp clear English with gentle Pakistani warmth"
+            : "Fluent native Pakistani young woman from Islamabad and Lahore speaking crystal-clear, sweet, natural Pakistani Urdu with clean feminine pronunciation";
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.8-flash-lite-tts",
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: text,
-                speechMetadata: {
-                  style: accentStyle,
+        const response = await ai.models.generateContent({
+          model: "gemini-3.8-flash-lite-tts",
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  text: spokenText,
+                  speechMetadata: {
+                    style: accentStyle,
+                  },
                 },
+              ],
+            },
+          ],
+          config: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName },
               },
-            ],
-          },
-        ],
-        config: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName },
             },
           },
-        },
-      });
+        });
 
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (base64Audio) {
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Audio) {
+          return res.json({
+            base64Audio,
+            format: "audio/wav",
+            engine: "gemini-tts",
+            success: true,
+          });
+        }
+      } catch {
+        // Fall through to free Pakistani Urdu Neural Edge-TTS
+      }
+    }
+
+    // Tier 2: Free Microsoft Neural Pakistani Urdu Female TTS via Python edge-tts (NO API KEY NEEDED!)
+    const pythonBin = process.env.PYTHON_BIN || (process.platform === "win32" ? "python" : "python3");
+    const edgeVoice = isMale
+      ? language === "en"
+        ? "en-US-AndrewNeural"
+        : "ur-PK-AsadNeural"
+      : language === "en"
+      ? "en-GB-SoniaNeural"
+      : "ur-PK-UzmaNeural";
+
+    const tmpMp3 = path.join(os.tmpdir(), `qnexus_tts_${crypto.randomBytes(6).toString("hex")}.mp3`);
+    try {
+      await execFileAsync(
+        pythonBin,
+        ["-m", "edge_tts", "--voice", edgeVoice, "--rate=+4%", "--text", spokenText, "--write-media", tmpMp3],
+        { timeout: 12000 }
+      );
+      const audioBuf = await fs.readFile(tmpMp3);
+      await fs.unlink(tmpMp3).catch(() => {});
+      if (audioBuf.length > 0) {
         return res.json({
-          base64Audio,
-          format: "audio/wav",
+          base64Audio: audioBuf.toString("base64"),
+          format: "audio/mpeg",
+          engine: edgeVoice,
           success: true,
         });
       }
     } catch {
-      // Fallback
+      await fs.unlink(tmpMp3).catch(() => {});
     }
 
     return res.status(200).json({ fallbackToBrowser: true });
   } catch (error: unknown) {
     console.error("TTS generation error:", error);
     return res.status(200).json({ fallbackToBrowser: true });
+  }
+});
+
+// ============================================================================
+// REAL HOST PC SYSTEM TELEMETRY, DISK/GPU/BATTERY, FILES & APP LAUNCHER
+// ============================================================================
+let prevCpuSnap = os.cpus().map((c) => c.times);
+
+function measureLiveCpuPercent(): number {
+  const curr = os.cpus().map((c) => c.times);
+  let idleDelta = 0;
+  let totalDelta = 0;
+  for (let i = 0; i < curr.length; i++) {
+    const prev = prevCpuSnap[i] || curr[i];
+    const now = curr[i];
+    const pTotal = prev.user + prev.nice + prev.sys + prev.idle + prev.irq;
+    const nTotal = now.user + now.nice + now.sys + now.idle + now.irq;
+    idleDelta += Math.max(0, now.idle - prev.idle);
+    totalDelta += Math.max(0, nTotal - pTotal);
+  }
+  prevCpuSnap = curr;
+  if (totalDelta === 0) return 12;
+  return parseFloat(Math.min(100, Math.max(1, ((totalDelta - idleDelta) / totalDelta) * 100)).toFixed(1));
+}
+
+interface SlowHardwareCache {
+  updatedAt: number;
+  gpuName: string;
+  gpuVramGb: number | null;
+  disks: { drive: string; totalGb: number; freeGb: number; usedGb: number }[];
+  batteryPercent: number | null;
+  isCharging: boolean | null;
+  osCaption: string;
+  runningApps: Record<string, boolean>;
+}
+
+let slowHwCache: SlowHardwareCache = {
+  updatedAt: 0,
+  gpuName: process.platform === "win32" ? "Windows Display Adapter" : "Integrated Host GPU",
+  gpuVramGb: null,
+  disks: [],
+  batteryPercent: null,
+  isCharging: null,
+  osCaption: `${os.type()} ${os.release()}`,
+  runningApps: {},
+};
+let probeInFlight: Promise<SlowHardwareCache> | null = null;
+
+async function getNativeRootDisk(): Promise<{ drive: string; totalGb: number; freeGb: number; usedGb: number } | null> {
+  try {
+    const targetPath = process.platform === "win32" ? path.parse(os.homedir()).root || "C:\\" : "/";
+    const stat = await fs.statfs(targetPath);
+    const totalBytes = Number(stat.blocks) * Number(stat.bsize);
+    const freeBytes = Number(stat.bavail ?? stat.bfree) * Number(stat.bsize);
+    if (totalBytes > 0) {
+      const totalGb = parseFloat((totalBytes / 1024 ** 3).toFixed(1));
+      const freeGb = parseFloat((freeBytes / 1024 ** 3).toFixed(1));
+      const usedGb = parseFloat(Math.max(0, totalGb - freeGb).toFixed(1));
+      const driveLabel = process.platform === "win32" ? targetPath.replace(/\\+$/, "") : "/";
+      return { drive: driveLabel, totalGb, freeGb, usedGb };
+    }
+  } catch {}
+  return null;
+}
+
+const TRACKED_APPS: { label: string; winProc: string; launchTarget: string }[] = [
+  { label: "VS Code", winProc: "Code", launchTarget: "code" },
+  { label: "Google Chrome", winProc: "chrome", launchTarget: "chrome" },
+  { label: "Microsoft Edge", winProc: "msedge", launchTarget: "msedge" },
+  { label: "Notepad", winProc: "notepad", launchTarget: "notepad" },
+  { label: "File Explorer", winProc: "explorer", launchTarget: "explorer" },
+  { label: "OBS Studio", winProc: "obs64", launchTarget: "obs64" },
+  { label: "Blender", winProc: "blender", launchTarget: "blender" },
+  { label: "Adobe Premiere Pro", winProc: "Adobe Premiere Pro", launchTarget: "Adobe Premiere Pro" },
+  { label: "Adobe After Effects", winProc: "AfterFX", launchTarget: "AfterFX" },
+  { label: "Adobe Photoshop", winProc: "Photoshop", launchTarget: "Photoshop" },
+];
+
+async function refreshSlowHardwareProbe(): Promise<SlowHardwareCache> {
+  const now = Date.now();
+  if (now - slowHwCache.updatedAt < 8000 && slowHwCache.updatedAt > 0) {
+    return slowHwCache;
+  }
+  if (probeInFlight) {
+    return probeInFlight;
+  }
+
+  probeInFlight = (async () => {
+    if (process.platform === "win32") {
+      try {
+        const psScript = `
+          $ErrorActionPreference = 'SilentlyContinue';
+          $os = Get-CimInstance Win32_OperatingSystem | Select-Object -First 1 Caption, Version;
+          $gpu = Get-CimInstance Win32_VideoController | Sort-Object AdapterRAM -Descending | Select-Object -First 1 Name, AdapterRAM;
+          $disks = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object { @{ drive=$_.DeviceID; totalGb=[math]::Round($_.Size/1GB,1); freeGb=[math]::Round($_.FreeSpace/1GB,1) } });
+          $bat = Get-CimInstance Win32_Battery | Select-Object -First 1 EstimatedChargeRemaining, BatteryStatus;
+          $procs = @(Get-Process | Select-Object -ExpandProperty ProcessName -Unique);
+          @{ os=$os; gpu=$gpu; disks=$disks; bat=$bat; procs=$procs } | ConvertTo-Json -Compress -Depth 4
+        `;
+        const { stdout } = await execFileAsync(
+          "powershell",
+          ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", psScript],
+          {
+            timeout: 10000,
+            windowsHide: true,
+            maxBuffer: 2 * 1024 * 1024,
+          }
+        );
+        const startIdx = stdout.indexOf("{");
+        if (startIdx !== -1) {
+          const parsed = JSON.parse(stdout.slice(startIdx).trim());
+          const procsSet = new Set<string>((parsed.procs || []).map((p: string) => String(p).toLowerCase()));
+          const runningApps: Record<string, boolean> = {};
+          for (const appInfo of TRACKED_APPS) {
+            runningApps[appInfo.label] = procsSet.has(appInfo.winProc.toLowerCase());
+          }
+          const disks = Array.isArray(parsed.disks)
+            ? parsed.disks.map((d: any) => ({
+                drive: String(d.drive || "C:"),
+                totalGb: Number(d.totalGb || 0),
+                freeGb: Number(d.freeGb || 0),
+                usedGb: Number(((d.totalGb || 0) - (d.freeGb || 0)).toFixed(1)),
+              }))
+            : [];
+          const rawVram = Number(parsed.gpu?.AdapterRAM || 0);
+          slowHwCache = {
+            updatedAt: Date.now(),
+            gpuName: parsed.gpu?.Name ? String(parsed.gpu.Name).trim() : slowHwCache.gpuName,
+            gpuVramGb: rawVram > 0 ? parseFloat((rawVram / 1024 ** 3).toFixed(1)) : slowHwCache.gpuVramGb,
+            disks,
+            batteryPercent:
+              parsed.bat?.EstimatedChargeRemaining !== undefined && parsed.bat?.EstimatedChargeRemaining !== null
+                ? Number(parsed.bat.EstimatedChargeRemaining)
+                : null,
+            isCharging:
+              parsed.bat?.BatteryStatus !== undefined && parsed.bat?.BatteryStatus !== null
+                ? Number(parsed.bat.BatteryStatus) === 2
+                : null,
+            osCaption: parsed.os?.Caption ? String(parsed.os.Caption).trim() : slowHwCache.osCaption,
+            runningApps,
+          };
+        }
+      } catch {
+        // Fallback disk probe in pure Node even if PowerShell is restricted
+        const nativeDisk = await getNativeRootDisk();
+        if (nativeDisk && slowHwCache.disks.length === 0) {
+          slowHwCache.disks = [nativeDisk];
+        }
+        slowHwCache.updatedAt = Date.now();
+      }
+    } else {
+      const nativeDisk = await getNativeRootDisk();
+      if (nativeDisk) {
+        slowHwCache.disks = [nativeDisk];
+      }
+      slowHwCache.updatedAt = Date.now();
+    }
+
+    if (slowHwCache.disks.length === 0) {
+      const nativeDisk = await getNativeRootDisk();
+      if (nativeDisk) slowHwCache.disks = [nativeDisk];
+    }
+
+    probeInFlight = null;
+    return slowHwCache;
+  })();
+
+  return probeInFlight;
+}
+
+app.get("/api/system/telemetry", async (_req, res) => {
+  try {
+    const cpus = os.cpus();
+    const cpuModel = cpus[0]?.model?.trim() || "Host CPU";
+    const cpuCores = cpus.length;
+    const cpuSpeedGhz = cpus[0]?.speed ? parseFloat((cpus[0].speed / 1000).toFixed(2)) : 0;
+    const cpuUsagePercent = measureLiveCpuPercent();
+
+    const totalMemBytes = os.totalmem();
+    const freeMemBytes = os.freemem();
+    const ramTotalGb = parseFloat((totalMemBytes / 1024 ** 3).toFixed(1));
+    const ramUsedGb = parseFloat(((totalMemBytes - freeMemBytes) / 1024 ** 3).toFixed(1));
+    const ramPercent = parseFloat(((ramUsedGb / Math.max(ramTotalGb, 0.1)) * 100).toFixed(1));
+
+    // Wait up to 1.8s on cold start; if PowerShell takes longer, return fast CPU/RAM/Disk immediately while warmup finishes
+    const hw = await Promise.race([
+      refreshSlowHardwareProbe(),
+      new Promise<SlowHardwareCache>((resolve) =>
+        setTimeout(async () => {
+          if (slowHwCache.disks.length === 0) {
+            const d = await getNativeRootDisk();
+            if (d) slowHwCache.disks = [d];
+          }
+          resolve(slowHwCache);
+        }, 1800)
+      ),
+    ]);
+
+    // Primary non-internal IPv4 address
+    let ipAddress = "127.0.0.1";
+    let netInterface = "Loopback";
+    const nets = os.networkInterfaces();
+    for (const [iface, addrs] of Object.entries(nets)) {
+      for (const addr of addrs || []) {
+        if (addr.family === "IPv4" && !addr.internal) {
+          ipAddress = addr.address;
+          netInterface = iface;
+          break;
+        }
+      }
+      if (ipAddress !== "127.0.0.1") break;
+    }
+
+    let username = "User";
+    try {
+      username = os.userInfo().username;
+    } catch {}
+
+    const primaryDisk = hw.disks[0] || (await getNativeRootDisk()) || { drive: "C:", totalGb: 0, freeGb: 0, usedGb: 0 };
+
+    return res.json({
+      realHost: true,
+      hostname: os.hostname(),
+      username,
+      platform: process.platform,
+      arch: os.arch(),
+      osCaption: hw.osCaption,
+      uptimeMinutes: Math.round(os.uptime() / 60),
+      cpuModel,
+      cpuCores,
+      cpuSpeedGhz,
+      cpuUsagePercent,
+      gpuName: hw.gpuName,
+      gpuVramGb: hw.gpuVramGb,
+      ramTotalGb,
+      ramUsedGb,
+      ramPercent,
+      disks: hw.disks,
+      primaryDisk,
+      batteryPercent: hw.batteryPercent,
+      isCharging: hw.isCharging,
+      ipAddress,
+      netInterface,
+      runningApps: hw.runningApps,
+      timestamp: Date.now(),
+    });
+  } catch (err) {
+    console.error("System telemetry error:", err);
+    return res.status(500).json({ error: "Telemetry probe failed" });
+  }
+});
+
+function formatBytesSize(bytes: number): string {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+function classifyFileType(ext: string): "video" | "image" | "audio" | "document" | "code" | "archive" {
+  const e = ext.toLowerCase();
+  if ([".mp4", ".mov", ".mkv", ".avi", ".webm", ".prproj", ".aep"].includes(e)) return "video";
+  if ([".png", ".jpg", ".jpeg", ".webp", ".gif", ".psd", ".svg", ".ico"].includes(e)) return "image";
+  if ([".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"].includes(e)) return "audio";
+  if ([".ts", ".tsx", ".js", ".jsx", ".py", ".json", ".html", ".css", ".md", ".bat", ".sh"].includes(e)) return "code";
+  if ([".zip", ".rar", ".7z", ".tar", ".gz"].includes(e)) return "archive";
+  return "document";
+}
+
+function getSuggestedSubfolder(type: string): string {
+  switch (type) {
+    case "video":
+      return "Organized/Videos";
+    case "image":
+      return "Organized/Images";
+    case "audio":
+      return "Organized/Audio";
+    case "code":
+      return "Organized/Code";
+    case "archive":
+      return "Organized/Archives";
+    default:
+      return "Organized/Documents";
+  }
+}
+
+async function scanRealUserFiles() {
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, "OneDrive", "Desktop"),
+    path.join(home, "Desktop"),
+    path.join(home, "Downloads"),
+    path.join(home, "Documents"),
+  ];
+  const visited = new Set<string>();
+  const results: {
+    name: string;
+    type: "video" | "image" | "audio" | "document" | "code" | "archive";
+    size: string;
+    path: string;
+    fullPath: string;
+    suggestedFolder: string;
+  }[] = [];
+
+  for (const dir of candidates) {
+    const resolved = path.resolve(dir);
+    if (visited.has(resolved)) continue;
+    visited.add(resolved);
+    try {
+      const entries = await fs.readdir(resolved, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile() || entry.name.startsWith(".")) continue;
+        if (entry.name.toLowerCase() === "desktop.ini") continue;
+        const fullPath = path.join(resolved, entry.name);
+        try {
+          const st = await fs.stat(fullPath);
+          const ext = path.extname(entry.name);
+          const ftype = classifyFileType(ext);
+          results.push({
+            name: entry.name,
+            type: ftype,
+            size: formatBytesSize(st.size),
+            path: resolved,
+            fullPath,
+            suggestedFolder: path.join(resolved, getSuggestedSubfolder(ftype)),
+          });
+        } catch {}
+        if (results.length >= 30) break;
+      }
+    } catch {}
+    if (results.length >= 30) break;
+  }
+
+  return results;
+}
+
+app.get("/api/system/files", async (_req, res) => {
+  try {
+    const files = await scanRealUserFiles();
+    return res.json({ files, count: files.length });
+  } catch {
+    return res.json({ files: [], count: 0 });
+  }
+});
+
+app.post("/api/system/organize-files", async (_req, res) => {
+  try {
+    const files = await scanRealUserFiles();
+    let moved = 0;
+    for (const f of files) {
+      // Never move Windows Desktop shortcuts (.lnk) or executables
+      if (/\.(lnk|exe|url|bat|cmd)$/i.test(f.name)) continue;
+      const targetDir = f.suggestedFolder;
+      const targetPath = path.join(targetDir, f.name);
+      try {
+        await fs.mkdir(targetDir, { recursive: true });
+        await fs.rename(f.fullPath, targetPath);
+        moved++;
+      } catch {}
+    }
+    const updated = await scanRealUserFiles();
+    return res.json({ moved, files: updated });
+  } catch {
+    return res.status(500).json({ error: "Organize failed", moved: 0 });
+  }
+});
+
+app.post("/api/system/launch-app", async (req, res) => {
+  try {
+    const { appName = "" } = req.body;
+    const match = TRACKED_APPS.find((a) => a.label.toLowerCase() === String(appName).toLowerCase());
+    if (!match) {
+      return res.status(400).json({ ok: false, message: `Unknown application: ${appName}` });
+    }
+    if (process.platform === "win32") {
+      const child = spawn("cmd", ["/c", "start", "", match.launchTarget], {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      child.unref();
+      slowHwCache.updatedAt = 0;
+      return res.json({ ok: true, message: `${match.label} launched on Windows.` });
+    }
+    if (process.platform === "darwin") {
+      const child = spawn("open", ["-a", match.label], { detached: true, stdio: "ignore" });
+      child.unref();
+      return res.json({ ok: true, message: `${match.label} launched on macOS.` });
+    }
+    return res.json({ ok: true, message: `Launch signal sent for ${match.label}.` });
+  } catch (err) {
+    console.error("Launch app error:", err);
+    return res.status(500).json({ ok: false, message: "Could not launch application" });
   }
 });
 
@@ -880,8 +1599,11 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`⚡ Quantum Tachyon Jarvis OS online on port ${PORT}`);
+  const host = process.env.HOST || "0.0.0.0";
+  app.listen(PORT, host, () => {
+    console.log(`⚡ Quantum Tachyon Jarvis OS online on http://${host}:${PORT}`);
+    // Pre-warm host GPU/Disk hardware probe in background so UI loads instantaneously
+    refreshSlowHardwareProbe().catch(() => {});
   });
 }
 

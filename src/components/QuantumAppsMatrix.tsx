@@ -60,7 +60,7 @@ export const QuantumAppsMatrix: React.FC<QuantumAppsMatrixProps> = ({
     {
       id: "desktop",
       title: "PC & Video Editing Suite",
-      subtitle: "Ryzen 9 & RTX 4090 telemetry, Premiere Pro & After Effects macros, file organizer",
+      subtitle: "Live Host PC telemetry, desktop app launcher, editing macros & file organizer",
       icon: Monitor,
       badge: "HARDWARE & APPS",
       gradient: "from-cyan-950/60 to-slate-950/90",

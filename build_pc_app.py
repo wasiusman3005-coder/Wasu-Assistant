@@ -56,19 +56,49 @@ def main() -> None:
     run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
 
     # 2. Install Node modules & build 4K UHD web bundle
-    if not (ROOT / "node_modules").exists():
-        run([npm_bin, "install"])
+    vite_bin = ROOT / "node_modules" / ".bin" / ("vite.cmd" if os.name == "nt" else "vite")
+    if not vite_bin.exists():
+        res = subprocess.run([npm_bin, "install"], cwd=str(ROOT))
+        if res.returncode != 0:
+            run([npm_bin, "install", "--legacy-peer-deps"])
     run([npm_bin, "run", "build"])
 
-    # 3. Verify icons exist
+    # 3. Verify icons exist & prepare Windows-safe BMP .ico for PyInstaller
     icon_ico = ROOT / "desktop" / "icon.ico"
     icon_png = ROOT / "desktop" / "icon.png"
-    if not icon_ico.exists() or not icon_png.exists():
+    win_ico = ROOT / "desktop" / "icon_win.ico"
+    if not icon_ico.exists() and not icon_png.exists():
         print("[ERROR] desktop/icon.ico or desktop/icon.png missing.")
         sys.exit(1)
 
-    # 4. Package standalone .exe with PyInstaller
+    build_icon = icon_ico
+    if os.name == "nt" and icon_png.exists():
+        try:
+            from PIL import Image  # type: ignore
+
+            img = Image.open(icon_png).convert("RGBA")
+            img.save(win_ico, format="ICO", bitmap_format="bmp", sizes=[(32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+            build_icon = win_ico
+        except Exception:
+            build_icon = icon_ico
+
+    # 4. Package standalone .exe with PyInstaller (only include existing data entries)
     sep = ";" if os.name == "nt" else ":"
+    data_candidates = [
+        ("dist", "dist"),
+        ("public", "public"),
+        ("desktop", "desktop"),
+        ("server.ts", "."),
+        ("package.json", "."),
+        (".env.example", "."),
+        (".env", "."),
+    ]
+    add_data_flags = [
+        f"--add-data={src}{sep}{dst}"
+        for src, dst in data_candidates
+        if (ROOT / src).exists()
+    ]
+
     pyinstaller_cmd = [
         sys.executable,
         "-m",
@@ -82,13 +112,8 @@ def main() -> None:
         "dist_pc",
         "--workpath",
         "build_pc",
-        f"--icon={icon_ico}",
-        f"--add-data=dist{sep}dist",
-        f"--add-data=public{sep}public",
-        f"--add-data=desktop{sep}desktop",
-        f"--add-data=server.ts{sep}.",
-        f"--add-data=package.json{sep}.",
-        f"--add-data=.env.example{sep}.",
+        f"--icon={build_icon}",
+        *add_data_flags,
         "jarvis_desktop.py",
     ]
     run(pyinstaller_cmd)

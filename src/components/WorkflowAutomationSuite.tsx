@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { soundEffects } from "../services/soundEffects";
 import { speechService } from "../services/speechService";
+import { fetchSystemTelemetry } from "../services/systemTelemetry";
 import {
   LanguageCode,
   VoiceGender,
@@ -278,7 +279,7 @@ export const WorkflowAutomationSuite: React.FC<WorkflowAutomationSuiteProps> = (
     },
   ]);
 
-  const runShellCommand = (cmdToRun?: string) => {
+  const runShellCommand = async (cmdToRun?: string) => {
     const command = (cmdToRun || cmdInput).trim();
     if (!command) return;
 
@@ -289,11 +290,19 @@ export const WorkflowAutomationSuite: React.FC<WorkflowAutomationSuiteProps> = (
     if (command.toLowerCase().includes("docker ps")) {
       output = "CONTAINER ID   IMAGE                 STATUS         NAMES\na4b2c1d0       postgres:16-alpine    Up 4 hours     q-nexus-db\ne7f8g9h0       redis:7.2-alpine      Up 4 hours     redis-cache\n11223344       ollama/ollama:latest  Up 2 hours     ollama-local-llm";
     } else if (command.toLowerCase().includes("git status")) {
-      output = "On branch main\nYour branch is up to date with 'origin/main'.\nChanges not staged for commit:\n  modified: src/components/WorkflowAutomationSuite.tsx\nno changes added to commit (use 'git add')";
+      output = "On branch main\nYour branch is up to date with 'origin/main'.\nWorking tree telemetry active.";
     } else if (command.toLowerCase().includes("git log")) {
-      output = "commit 7f4a2b9 (HEAD -> main) feat: add screen context awareness & docker orchestration\ncommit 9d1e8c4 fix: auto-morphing UHD logo design transitions\ncommit 3a5b7c1 chore: optimize 4K font antialiasing";
+      output = "commit 7f4a2b9 (HEAD -> main) feat: real host pc telemetry & Pakistani Urdu Zoya voice\ncommit 9d1e8c4 fix: auto-morphing UHD logo design transitions";
     } else if (command.toLowerCase().includes("systeminfo")) {
-      output = "Host: AMD Ryzen 9 7950X 16-Core Processor\nGPU: NVIDIA GeForce RTX 4090 24GB GDDR6X\nOS: Windows 11 Pro 64-bit Build 26100\nTotal RAM: 64 GB DDR5-6000\nPCIe NVMe: 2TB Samsung 990 Pro (Read: 12,400 MB/s)";
+      const tel = await fetchSystemTelemetry();
+      if (tel) {
+        const diskLines = (tel.disks.length > 0 ? tel.disks : [tel.primaryDisk])
+          .map((d) => `Disk ${d.drive}: ${d.usedGb} GB used / ${d.totalGb} GB total (${d.freeGb} GB free)`)
+          .join("\n");
+        output = `Host: ${tel.hostname} (User: ${tel.username})\nOS: ${tel.osCaption} (${tel.platform} ${tel.arch})\nCPU: ${tel.cpuModel} (${tel.cpuCores} Cores @ ${tel.cpuSpeedGhz} GHz, Load ${tel.cpuUsagePercent}%)\nGPU: ${tel.gpuName}${tel.gpuVramGb ? ` (${tel.gpuVramGb} GB VRAM)` : ""}\nRAM: ${tel.ramUsedGb} / ${tel.ramTotalGb} GB (${tel.ramPercent}%)\nIPv4: ${tel.ipAddress} (${tel.netInterface})\n${diskLines}`;
+      } else {
+        output = "Unable to probe local telemetry endpoint right now.";
+      }
     } else {
       output = `[OK] Command executed: '${command}' (Status: Process 0 finished in 42ms)`;
     }

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Shield, Lock, Eye, EyeOff, Fingerprint, CheckCircle2, AlertTriangle, KeyRound, Cpu, HardDrive, Video, Activity, Radio, Check, Terminal, User, CornerDownLeft } from "lucide-react";
 import { soundEffects } from "../services/soundEffects";
 import { speechService } from "../services/speechService";
+import { fetchSystemTelemetry, SystemTelemetry } from "../services/systemTelemetry";
 import { LockScreenQuantumLogo3D } from "./LockScreenQuantumLogo3D";
 import { LanguageCode } from "../types";
 
@@ -24,9 +25,22 @@ export const SecurityGate: React.FC<SecurityGateProps> = ({
   const usernameInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus the username input upon mount
+  const [hostTelemetry, setHostTelemetry] = useState<SystemTelemetry | null>(null);
+
+  // Auto-focus username input and read real PC hardware on mount
   useEffect(() => {
     usernameInputRef.current?.focus();
+    let cancelled = false;
+    const load = async () => {
+      const data = await fetchSystemTelemetry();
+      if (!cancelled && data) setHostTelemetry(data);
+    };
+    load();
+    const timer = setInterval(load, 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []);
 
   // Diagnostic State (7-point system check before opening workspace)
@@ -37,32 +51,40 @@ export const SecurityGate: React.FC<SecurityGateProps> = ({
   const diagnosticItems = [
     {
       title: "Quantum Cryptographic Handshake",
-      detail: "4096-bit SHA-512 & Tachyon Entanglement Key Verified",
+      detail: `4096-bit SHA-512 • Host: ${hostTelemetry?.hostname || "LOCAL-PC"} (${hostTelemetry?.osCaption || "Host OS"})`,
       icon: Shield,
     },
     {
       title: "Host PC Processor Hardware Check",
-      detail: "AMD Ryzen 9 7950X • 16 Cores / 32 Threads @ 5.4 GHz • 48°C Optimal",
+      detail: hostTelemetry
+        ? `${hostTelemetry.cpuModel} • ${hostTelemetry.cpuCores} Logical Cores @ ${hostTelemetry.cpuSpeedGhz} GHz • Load ${hostTelemetry.cpuUsagePercent}%`
+        : "Scanning real host CPU cores & clock speed...",
       icon: Cpu,
     },
     {
-      title: "GPU CUDA Render Engine Calibration",
-      detail: "NVIDIA GeForce RTX 4090 24GB GDDR6X • Mercury Playback Synced",
+      title: "GPU & Display Engine Calibration",
+      detail: hostTelemetry
+        ? `${hostTelemetry.gpuName}${hostTelemetry.gpuVramGb ? ` (${hostTelemetry.gpuVramGb} GB VRAM)` : ""} • Active`
+        : "Detecting host graphics adapter...",
       icon: Video,
     },
     {
-      title: "Memory & High-Speed NVMe Storage Bus",
-      detail: "64GB DDR5-6000 MHz • 2TB PCIe 5.0 SSD (Read 12,400 MB/s) Active",
+      title: "Memory & Primary Storage Bus",
+      detail: hostTelemetry
+        ? `${hostTelemetry.ramUsedGb} / ${hostTelemetry.ramTotalGb} GB RAM (${hostTelemetry.ramPercent}%) • Drive ${hostTelemetry.primaryDisk.drive} ${hostTelemetry.primaryDisk.freeGb} GB Free`
+        : "Probing physical RAM & host disk partitions...",
       icon: HardDrive,
     },
     {
-      title: "Adobe Creative Suite & Desktop Bridge",
-      detail: "Premiere Pro CUDA Macros & After Effects Multi-Frame Render Online",
+      title: "Desktop Suite & Network Socket Bridge",
+      detail: hostTelemetry
+        ? `IPv4 ${hostTelemetry.ipAddress} (${hostTelemetry.netInterface}) • Desktop App Launcher Ready`
+        : "Linking local desktop application bridge...",
       icon: Terminal,
     },
     {
-      title: "Trilingual Neural Voice Matrix",
-      detail: "Crystal Clear Pakistani Urdu, Lahori Punjabi & English Core Active",
+      title: "Zoya Pakistani Urdu Neural Voice Matrix",
+      detail: "Crystal-Clear Female Pakistani Urdu (ur-PK), Punjabi & English Core Active",
       icon: Radio,
     },
     {
@@ -99,16 +121,16 @@ export const SecurityGate: React.FC<SecurityGateProps> = ({
             // Storage fallback
           }
 
-          // Vocal greeting customized to user
+          // Vocal greeting customized to user in Zoya's Pakistani Urdu female voice
           try {
-            const name = userToGreet || "Commander";
+            const name = userToGreet || "Wasi Jaan";
             const greet =
               preferredLanguage === "pa"
-                ? `Sat Sri Akal ${name} paji! Saare PC hardware te quantum systems verify ho gaye ne. Cockpit online ae.`
+                ? `Sat Sri Akal ${name} jaan! Tuhade PC da saara hardware verify ho gaya ae. Main Zoya hazir aan.`
                 : preferredLanguage === "en"
-                ? `Welcome Commander ${name}. All host PC hardware and quantum cores are verified operational.`
-                : `Khush Amdeed ${name} Sahab! Tamam PC hardware, video editing suite aur health guards check ho chuke hain. Cockpit online hai.`;
-            speechService.speak(greet, { lang: preferredLanguage, gender: "male" });
+                ? `Welcome ${name}! All your real PC hardware and quantum cores are verified operational. Zoya is online.`
+                : `Assalamualaikum ${name} jaan! Aapke PC ka tamam hardware verify ho chuka hai. Main aapki Zoya hazir hoon.`;
+            speechService.speak(greet, { lang: preferredLanguage, gender: "female" });
           } catch {
             // Speech fallback
           }
